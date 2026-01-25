@@ -137,3 +137,63 @@ From 24 failure memories:
 Run the command. Read the output. THEN claim the result.
 
 This is non-negotiable.
+
+## Documentation Check
+
+After verification passes, check if documentation needs update:
+
+**1. Analyze code changes:**
+```bash
+git diff --cached --stat
+git diff --cached
+```
+
+**2. Check if ADR needed:**
+
+Ask these questions:
+- Did we introduce a new library/framework?
+- Did we change architecture patterns?
+- Did we make a technical selection (A vs B)?
+- Did we make important trade-off decisions?
+
+If YES to any → ADR is required.
+
+**3. Check maintenance docs:**
+
+| Change Type | Document to Update |
+|-------------|-------------------|
+| New library added | `.ai/tech-stack.md` |
+| Architecture changed | `ARCHITECTURE.md` |
+| New common pattern | `docs/examples/` |
+| Team standards changed | `.ai/context.md` |
+
+**4. Offer to auto-generate:**
+
+If documentation needed:
+```
+📋 Documentation updates needed:
+
+- [ ] ADR: New library introduced (React Query)
+      Template: templates/adr-template.md
+
+- [ ] Update: .ai/tech-stack.md (add React Query to allowed list)
+
+Should I generate these documents? (yes/no)
+```
+
+If user confirms:
+- Use templates to generate documents
+- Fill in information from code changes
+- Save to appropriate locations
+- Notify user to review and adjust
+
+**5. If no documentation needed:**
+```
+✅ All verifications passed
+📋 No documentation updates needed
+Ready to commit.
+```
+
+## Remember
+
+Documentation is part of completion. Verification without documentation check is incomplete.
