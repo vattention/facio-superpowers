@@ -94,36 +94,9 @@ git commit -m "feat: add specific feature"
 - Reference relevant skills with @ syntax
 - DRY, YAGNI, TDD, frequent commits
 
-## Document Export
-
-After saving the plan, automatically export a team proposal document:
-
-**1. Extract key information from plan:**
-- Goal (one sentence)
-- Architecture approach (2-3 sentences)
-- Tech stack (key technologies)
-- Files to create/modify (list)
-- Implementation summary (high-level steps)
-
-**2. Use template:** `templates/proposal-template.md`
-
-**3. Generate proposal document:**
-- Replace template variables with extracted info
-- Save to: `docs/proposals/YYYY-MM-DD-<feature-name>.md`
-- Use same date and feature name as plan file
-
-**4. Notify user:**
-```
-✅ Plan saved to: docs/plans/<filename>.md
-📄 Team proposal exported to: docs/proposals/<filename>.md
-
-Please share the proposal with team for quick review (1 min).
-The proposal is a simplified version for team visibility.
-```
-
 ## Execution Handoff
 
-After document export, offer execution choice:
+After saving the plan, offer execution choice:
 
 **"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
 
