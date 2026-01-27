@@ -1,0 +1,75 @@
+# Facio Superpowers 配置文件
+
+# 文档自动更新配置
+documentation:
+  # 是否启用自动更新
+  auto_update: true
+
+  # 触发条件
+  trigger:
+    # 最少变更文件数
+    min_files_changed: 2
+    # 最少变更行数
+    min_lines_changed: 20
+    # 跳过仅测试文件的变更
+    skip_test_only: true
+    # 跳过仅样式文件的变更
+    skip_style_only: true
+    # 跳过小于此行数的变更
+    skip_small_changes: 10
+
+  # 模型选择
+  model:
+    # 检查阶段使用的模型
+    check: haiku
+    # 生成阶段使用的模型
+    generate: sonnet
+
+  # 缓存配置
+  cache:
+    enabled: true
+    # 缓存过期时间（秒）
+    ttl: 3600
+
+  # 批量更新模式
+  batch_mode: false
+  # 批量更新间隔（分钟）
+  batch_interval: 60
+
+# 成本监控配置
+cost_tracking:
+  # 是否启用成本追踪
+  enabled: true
+
+  # 日志文件路径
+  log_file: .facio-superpowers/cost-log.jsonl
+
+  # 成本预算（美元/月）
+  monthly_budget: 50
+
+  # 预警阈值
+  alert_thresholds:
+    # 达到预算的百分比时预警
+    warning: 70   # 70% 时警告
+    critical: 90  # 90% 时严重警告
+
+  # 模型价格（美元/百万 tokens）
+  pricing:
+    haiku:
+      input: 0.25
+      output: 1.25
+    sonnet:
+      input: 3.0
+      output: 15.0
+    opus:
+      input: 15.0
+      output: 75.0
+
+# 报告配置
+reporting:
+  # 是否启用每日报告
+  daily_summary: true
+  # 是否启用每周报告
+  weekly_summary: true
+  # 报告输出路径
+  report_dir: .facio-superpowers/reports
