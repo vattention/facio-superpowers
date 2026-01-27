@@ -54,6 +54,7 @@ function init() {
     '.cursor/skills',
     'docs/adr',
     'docs/plans',
+    'docs/modules',
     'docs/examples',
     'templates',
     'scripts',
@@ -101,6 +102,10 @@ function init() {
   log('\n📄 Installing templates...', 'blue');
   const templates = [
     { src: 'adr-template.md', dest: 'templates/adr-template.md' },
+    { src: 'README-ROOT.md', dest: 'templates/README-ROOT.md' },
+    { src: 'DOCUMENTATION-MAP.md', dest: 'templates/DOCUMENTATION-MAP.md' },
+    { src: 'MODULE-README.md', dest: 'templates/MODULE-README.md' },
+    { src: 'MODULE-ARCHITECTURE.md', dest: 'templates/MODULE-ARCHITECTURE.md' },
     { src: 'CLAUDE-TEAM.md', dest: 'CLAUDE-TEAM.md' },
     { src: 'CLAUDE-PROJECT.md', dest: 'CLAUDE.md' },
   ];
@@ -218,12 +223,30 @@ Use \`/verification-before-completion\` skill after making architectural decisio
     log('  ✓ Injected workflow instructions into CLAUDE.md', 'green');
   }
 
+  // Copy modular docs guide
+  log('\n📖 Installing documentation guide...', 'blue');
+  const docsGuide = path.join(CACHE_DIR, 'MODULAR-DOCS-GUIDE.md');
+  const docsGuideDest = path.join(cwd, 'docs', 'MODULAR-DOCS-GUIDE.md');
+
+  if (fs.existsSync(docsGuide)) {
+    if (!fs.existsSync(docsGuideDest)) {
+      fs.copyFileSync(docsGuide, docsGuideDest);
+      log('  ✓ docs/MODULAR-DOCS-GUIDE.md', 'green');
+    } else {
+      log('  - docs/MODULAR-DOCS-GUIDE.md (already exists)', 'yellow');
+    }
+  }
+
   // Success message
   log('\n✅ Initialization complete!\n', 'green');
   log('Next steps:', 'blue');
-  log('1. Edit CLAUDE.md to add project-specific information');
-  log('2. Review CLAUDE-TEAM.md for team standards');
-  log('3. Start using skills:');
+  log('1. Review docs/MODULAR-DOCS-GUIDE.md for documentation system overview');
+  log('2. Edit CLAUDE.md to add project-specific information');
+  log('3. Review CLAUDE-TEAM.md for team standards');
+  log('4. Create module documentation:');
+  log('   mkdir -p docs/modules/your-module');
+  log('   cp templates/MODULE-README.md docs/modules/your-module/README.md');
+  log('5. Start using skills:');
   log('   - /prepare-context (before development)');
   log('   - /verification-before-completion (after development)');
   log('\n📚 Documentation: https://github.com/vattention/facio-superpowers\n');
@@ -264,6 +287,10 @@ function sync() {
   log('\n📄 Updating templates...', 'blue');
   const templates = [
     { src: 'adr-template.md', dest: 'templates/adr-template.md' },
+    { src: 'README-ROOT.md', dest: 'templates/README-ROOT.md' },
+    { src: 'DOCUMENTATION-MAP.md', dest: 'templates/DOCUMENTATION-MAP.md' },
+    { src: 'MODULE-README.md', dest: 'templates/MODULE-README.md' },
+    { src: 'MODULE-ARCHITECTURE.md', dest: 'templates/MODULE-ARCHITECTURE.md' },
     { src: 'CLAUDE-TEAM.md', dest: 'CLAUDE-TEAM.md' },
   ];
 
@@ -276,6 +303,16 @@ function sync() {
       log(`  ✓ ${dest}`, 'green');
     }
   });
+
+  // Sync modular docs guide
+  log('\n📖 Updating documentation guide...', 'blue');
+  const docsGuide = path.join(CACHE_DIR, 'MODULAR-DOCS-GUIDE.md');
+  const docsGuideDest = path.join(cwd, 'docs', 'MODULAR-DOCS-GUIDE.md');
+
+  if (fs.existsSync(docsGuide)) {
+    fs.copyFileSync(docsGuide, docsGuideDest);
+    log('  ✓ docs/MODULAR-DOCS-GUIDE.md', 'green');
+  }
 
   log('\n✅ Sync complete!\n', 'green');
 }
