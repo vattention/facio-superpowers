@@ -1,0 +1,44 @@
+{
+  "name": "@vattention/facio-superpowers",
+  "version": "1.0.0",
+  "description": "Documentation management for AI-assisted development with Claude Code and Cursor",
+  "main": "cli.js",
+  "bin": {
+    "facio-superpowers": "./cli.js"
+  },
+  "scripts": {
+    "test": "node cli.js"
+  },
+  "keywords": [
+    "claude-code",
+    "cursor",
+    "ai-assisted-development",
+    "documentation",
+    "adr",
+    "architecture-decision-records",
+    "superpowers",
+    "ai-tools"
+  ],
+  "author": "Facio Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vattention/facio-superpowers.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "bugs": {
+    "url": "https://github.com/vattention/facio-superpowers/issues"
+  },
+  "homepage": "https://github.com/vattention/facio-superpowers#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "cli.js",
+    "skills/",
+    "templates/",
+    "README-FACIO.md"
+  ]
+}

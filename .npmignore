@@ -1,0 +1,25 @@
+# Development files
+node_modules/
+.git/
+.gitignore
+.DS_Store
+
+# Documentation (keep only README-FACIO.md)
+README.md
+docs/
+
+# Test files
+test/
+*.test.js
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.swp

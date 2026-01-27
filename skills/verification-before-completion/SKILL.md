@@ -185,6 +185,10 @@ If user confirms:
 - Use templates to generate documents
 - Fill in information from code changes
 - Save to appropriate locations
+- **Auto-update document indexes:**
+  - If ADR generated: Update `docs/adr/README.md` with new entry
+  - If important ADR: Add reference to `.ai/context.md`
+  - Update `docs/plans/README.md` if design/plan documents exist
 - Notify user to review and adjust
 
 **5. If no documentation needed:**
