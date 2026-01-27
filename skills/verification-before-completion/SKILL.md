@@ -230,10 +230,73 @@ If user confirms:
 - Save to appropriate locations
 - **Auto-update document indexes:**
   - If ADR generated: Update `docs/adr/README.md` with new entry
-  - If module doc created: Update `docs/DOCUMENTATION-MAP.md`
+  - If module doc created: Update `docs/DOCUMENTATION-MAP.md` module list
   - If important ADR: Add reference to `CLAUDE.md`
   - Update `docs/plans/README.md` if design/plan documents exist
+- **Auto-update module documentation:**
+  - Scan `src/modules/{module}/components/` for component files
+  - Update "核心组件" table in `docs/modules/{module}/README.md`
+  - Scan `src/modules/{module}/index.ts` for exports
+  - Update "API" section in `docs/modules/{module}/README.md`
+  - Update "最后更新" timestamp
 - Notify user to review and adjust
+
+**Detailed update procedures:**
+
+a) **Creating new module documentation:**
+   ```bash
+   # 1. Create module directory
+   mkdir -p docs/modules/{module}
+
+   # 2. Generate README from template
+   cp templates/MODULE-README.md docs/modules/{module}/README.md
+
+   # 3. Fill in module information:
+   - Module name
+   - Description (from code analysis)
+   - Current components (scan src/modules/{module}/components/)
+   - Current exports (scan src/modules/{module}/index.ts)
+   - Related ADRs (search for module name in ADRs)
+
+   # 4. Update DOCUMENTATION-MAP.md
+   # Add entry to "模块文档" table:
+   | {Module} | {Description} | [docs/modules/{module}/README.md](...) |
+   ```
+
+b) **Updating existing module documentation:**
+   ```bash
+   # 1. Scan for new components
+   find src/modules/{module}/components -name "*.tsx" -o -name "*.ts"
+
+   # 2. Compare with "核心组件" table in README.md
+
+   # 3. Add missing components:
+   | ComponentName | {职责} | src/modules/{module}/components/ComponentName.tsx | ✅ |
+
+   # 4. Scan for new exports
+   grep "export" src/modules/{module}/index.ts
+
+   # 5. Compare with "API" section in README.md
+
+   # 6. Add missing exports:
+   | functionName | {描述} | {参数} | {返回值} |
+
+   # 7. Update timestamp
+   Replace "最后更新：{OLD_DATE}" with "最后更新：{TODAY}"
+   ```
+
+c) **Updating DOCUMENTATION-MAP.md:**
+   ```bash
+   # When new module doc created:
+   # 1. Find "### 模块文档" section
+   # 2. Add new row to table:
+   | {Module} | {Description} | [docs/modules/{module}/README.md](...) |
+
+   # When new ADR created:
+   # 1. Find appropriate category (技术选型/架构模式/功能实现)
+   # 2. Add new entry:
+   - [ADR-XXX: {Title}](./adr/XXX-title.md)
+   ```
 
 **7. If no documentation needed:**
 ```
