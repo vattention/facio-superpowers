@@ -148,7 +148,17 @@ git diff --cached --stat
 git diff --cached
 ```
 
-**2. Check if ADR needed:**
+**2. Identify affected modules:**
+
+Analyze file paths to identify modules:
+```
+src/modules/account/  → account module
+src/modules/settings/ → settings module
+src/renderer/         → renderer module
+src/main/             → main module
+```
+
+**3. Check if ADR needed:**
 
 Ask these questions:
 - Did we introduce a new library/framework?
@@ -158,16 +168,40 @@ Ask these questions:
 
 If YES to any → ADR is required.
 
-**3. Check maintenance docs:**
+**4. Check module documentation:**
+
+For each affected module, check:
+
+a) **Module README exists?**
+   - Check: `docs/modules/{module}/README.md`
+   - If NO → Offer to create from template
+
+b) **Module documentation needs update?**
+   - New components added → Update "核心组件" section
+   - New API/functions exported → Update "API" section
+   - Architecture changed → Update ARCHITECTURE.md
+   - New examples needed → Add to examples/
+
+c) **Component list sync:**
+   - List all components in `src/modules/{module}/components/`
+   - Compare with "核心组件" table in README.md
+   - Report missing or outdated entries
+
+d) **API list sync:**
+   - Check module's main export (index.ts)
+   - Compare with "API" section in README.md
+   - Report missing or outdated entries
+
+**5. Check maintenance docs:**
 
 | Change Type | Document to Update |
 |-------------|-------------------|
-| New library added | `.ai/tech-stack.md` |
-| Architecture changed | `ARCHITECTURE.md` |
-| New common pattern | `docs/examples/` |
-| Team standards changed | `.ai/context.md` |
+| New library added | `CLAUDE.md` (tech stack section) |
+| Architecture changed | `docs/ARCHITECTURE.md` |
+| New common pattern | `docs/modules/{module}/examples/` |
+| Team standards changed | `CLAUDE.md` |
 
-**4. Offer to auto-generate:**
+**6. Offer to auto-generate:**
 
 If documentation needed:
 ```
@@ -176,22 +210,32 @@ If documentation needed:
 - [ ] ADR: New library introduced (React Query)
       Template: templates/adr-template.md
 
-- [ ] Update: .ai/tech-stack.md (add React Query to allowed list)
+- [ ] Module Doc: account module
+      Missing: docs/modules/account/README.md
+      Template: templates/MODULE-README.md
 
-Should I generate these documents? (yes/no)
+- [ ] Update: docs/modules/account/README.md
+      - Add ComponentA to "核心组件" table
+      - Add useAccountData to "API" section
+
+- [ ] Update: CLAUDE.md (add React Query to tech stack)
+
+Should I generate/update these documents? (yes/no)
 ```
 
 If user confirms:
-- Use templates to generate documents
+- Use templates to generate new documents
+- Update existing documents with new information
 - Fill in information from code changes
 - Save to appropriate locations
 - **Auto-update document indexes:**
   - If ADR generated: Update `docs/adr/README.md` with new entry
-  - If important ADR: Add reference to `.ai/context.md`
+  - If module doc created: Update `docs/DOCUMENTATION-MAP.md`
+  - If important ADR: Add reference to `CLAUDE.md`
   - Update `docs/plans/README.md` if design/plan documents exist
 - Notify user to review and adjust
 
-**5. If no documentation needed:**
+**7. If no documentation needed:**
 ```
 ✅ All verifications passed
 📋 No documentation updates needed
