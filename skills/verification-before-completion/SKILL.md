@@ -142,6 +142,16 @@ This is non-negotiable.
 
 After verification passes, check if documentation needs update:
 
+**MANDATORY CHECKLIST - DO NOT SKIP ANY STEP:**
+
+- [ ] Step 1: Analyze code changes (git diff)
+- [ ] Step 2: Identify affected modules
+- [ ] Step 3: Check if ADR needed
+- [ ] Step 4: **Check module documentation** (CRITICAL - often skipped!)
+- [ ] Step 5: Check maintenance docs
+- [ ] Step 6: Offer to auto-generate/update
+- [ ] Step 7: If no updates needed, confirm
+
 **1. Analyze code changes:**
 ```bash
 git diff --cached --stat
@@ -158,6 +168,18 @@ src/renderer/         → renderer module
 src/main/             → main module
 ```
 
+**CRITICAL: You MUST identify affected modules before proceeding.**
+
+Example:
+```bash
+# Changed files:
+src/modules/account/components/LoginForm.tsx
+src/modules/account/services/auth.ts
+
+# Identified modules:
+- account
+```
+
 **3. Check if ADR needed:**
 
 Ask these questions:
@@ -170,27 +192,49 @@ If YES to any → ADR is required.
 
 **4. Check module documentation:**
 
+**CRITICAL: For EACH identified module, you MUST perform these checks:**
+
 For each affected module, check:
 
 a) **Module README exists?**
    - Check: `docs/modules/{module}/README.md`
-   - If NO → Offer to create from template
+   - If NO → **MUST** offer to create from template
+   - If YES → Proceed to check if update needed
 
 b) **Module documentation needs update?**
-   - New components added → Update "核心组件" section
-   - New API/functions exported → Update "API" section
-   - Architecture changed → Update ARCHITECTURE.md
+   - New components added → **MUST** update "核心组件" section
+   - New API/functions exported → **MUST** update "API" section
+   - Architecture changed → **MUST** update ARCHITECTURE.md
    - New examples needed → Add to examples/
 
 c) **Component list sync:**
-   - List all components in `src/modules/{module}/components/`
-   - Compare with "核心组件" table in README.md
-   - Report missing or outdated entries
+   - **MUST** list all components in `src/modules/{module}/components/`
+   - **MUST** compare with "核心组件" table in README.md
+   - **MUST** report missing or outdated entries
 
 d) **API list sync:**
-   - Check module's main export (index.ts)
-   - Compare with "API" section in README.md
-   - Report missing or outdated entries
+   - **MUST** check module's main export (index.ts/index.py/__init__.py)
+   - **MUST** compare with "API" section in README.md
+   - **MUST** report missing or outdated entries
+
+**Example output:**
+```
+🔍 Checking module documentation...
+
+Module: account
+  ✓ docs/modules/account/README.md exists
+  ⚠️  Found 2 new components not in documentation:
+      - LoginForm (src/modules/account/components/LoginForm.tsx)
+      - RegisterForm (src/modules/account/components/RegisterForm.tsx)
+  ⚠️  Found 1 new API not in documentation:
+      - useAuth (src/modules/account/index.ts)
+
+Module: settings
+  ✗ docs/modules/settings/README.md does NOT exist
+  → Will create from template
+```
+
+**If you skip this check, you are violating the skill requirements.**
 
 **5. Check maintenance docs:**
 
