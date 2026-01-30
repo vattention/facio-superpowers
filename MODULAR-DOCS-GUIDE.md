@@ -234,7 +234,9 @@ project-root/
    ```
 
 2. **识别涉及的模块**
-   - 通过文件路径识别（如 `src/modules/account/` → account 模块）
+   - 动态识别：支持多种项目结构（`src/modules/account/`、`src/auth/`、`myproject/api/` 等）
+   - 自动排除工具目录（utils/、lib/、types/、tests/ 等）
+   - 适用于任何编程语言（JavaScript、Python、Go 等）
 
 3. **检查 ADR 需求**
    - 新库/框架？
