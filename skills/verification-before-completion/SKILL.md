@@ -160,77 +160,43 @@ git diff --cached
 
 **2. Identify affected modules:**
 
-**CRITICAL: Dynamically identify modules from changed file paths.**
+**CRITICAL: Use your judgment to identify modules/systems that need documentation.**
 
-Analyze file paths to identify modules based on directory structure:
+Analyze the changed files and determine which modules/systems are affected:
 
-**Pattern matching rules:**
-1. `src/modules/{module}/` → module name is `{module}`
-2. `src/{module}/` → module name is `{module}` (if not a common dir like utils/types/lib)
-3. `{module}/` at project root → module name is `{module}`
+**What qualifies as a module/system:**
+- Has independent functional boundaries (e.g., authentication, user management, payment processing)
+- Contains its own components, services, or APIs
+- Represents a cohesive subsystem worth documenting separately
+- NOT utility functions, type definitions, or configuration files
 
-**Common directory patterns (examples, not exhaustive):**
-```
-# Pattern 1: Explicit modules directory
-src/modules/account/     → account module
-src/modules/settings/    → settings module
-src/modules/dashboard/   → dashboard module
+**How to identify:**
+1. Get changed files: `git diff --cached --name-only`
+2. Examine the directory structure and file contents
+3. Use your understanding of the codebase to determine:
+   - Is this part of a larger functional module?
+   - Does it have its own domain logic and boundaries?
+   - Would it benefit from dedicated documentation?
 
-# Pattern 2: Direct subdirectories
-src/auth/                → auth module
-src/api/                 → api module
-src/database/            → database module
+**Examples of modules/systems:**
+- `src/modules/account/` or `src/auth/` → Authentication system
+- `src/api/` or `backend/api/` → API layer
+- `src/renderer/` in Electron app → Renderer process
+- `myproject/payment/` → Payment processing module
+- `services/notification/` → Notification service
 
-# Pattern 3: Electron/Desktop apps
-src/renderer/            → renderer module
-src/main/                → main module
-src/preload/             → preload module
+**NOT modules/systems:**
+- `src/utils/` → Utility functions (shared helpers)
+- `src/types/` → Type definitions (no business logic)
+- `src/config/` → Configuration files
+- `tests/` → Test files (unless testing infrastructure itself)
 
-# Pattern 4: Python packages
-myproject/auth/          → auth module
-myproject/api/           → api module
-myproject/services/      → services module
-```
+**Check if project uses modular documentation:**
+- Look for `docs/modules/` directory
+- If it exists, identify which modules need documentation updates
+- If it doesn't exist, skip module documentation check
 
-**Exclusions (NOT modules):**
-- `src/utils/`, `src/lib/`, `src/helpers/` → utility directories
-- `src/types/`, `src/interfaces/` → type definition directories
-- `src/constants/`, `src/config/` → configuration directories
-- `tests/`, `__tests__/`, `spec/` → test directories
-
-**Algorithm:**
-```bash
-# 1. Get changed files
-git diff --cached --name-only
-
-# 2. Extract module names
-# For each file path:
-#   - Remove common prefixes (src/, lib/, etc.)
-#   - Take first directory component
-#   - Skip if in exclusion list
-#   - Add to modules set
-
-# 3. Result: List of unique module names
-```
-
-**Example:**
-```bash
-# Changed files:
-src/modules/account/components/LoginForm.tsx
-src/modules/account/services/auth.ts
-src/api/routes/users.py
-src/database/models/user.py
-
-# Identified modules:
-- account (from src/modules/account/)
-- api (from src/api/)
-- database (from src/database/)
-```
-
-**If no clear module structure:**
-- Check if project has `docs/modules/` directory
-- If YES: Treat top-level src/ subdirectories as modules
-- If NO: Skip module documentation check (project doesn't use modular docs)
+**Use your judgment:** Don't rely on rigid rules. Understand the code's purpose and structure to determine what needs documentation.
 
 **3. Check if ADR needed:**
 

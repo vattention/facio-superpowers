@@ -234,9 +234,9 @@ project-root/
    ```
 
 2. **识别涉及的模块**
-   - 动态识别：支持多种项目结构（`src/modules/account/`、`src/auth/`、`myproject/api/` 等）
-   - 自动排除工具目录（utils/、lib/、types/、tests/ 等）
-   - 适用于任何编程语言（JavaScript、Python、Go 等）
+   - AI 根据代码内容和结构判断哪些是需要文档化的模块/系统
+   - 判断标准：是否有独立的功能边界、是否包含组件/服务/API、是否值得单独文档化
+   - 自动排除工具函数、类型定义、配置文件等
 
 3. **检查 ADR 需求**
    - 新库/框架？
