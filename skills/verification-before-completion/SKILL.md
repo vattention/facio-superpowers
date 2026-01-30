@@ -160,25 +160,77 @@ git diff --cached
 
 **2. Identify affected modules:**
 
-Analyze file paths to identify modules:
+**CRITICAL: Dynamically identify modules from changed file paths.**
+
+Analyze file paths to identify modules based on directory structure:
+
+**Pattern matching rules:**
+1. `src/modules/{module}/` → module name is `{module}`
+2. `src/{module}/` → module name is `{module}` (if not a common dir like utils/types/lib)
+3. `{module}/` at project root → module name is `{module}`
+
+**Common directory patterns (examples, not exhaustive):**
 ```
-src/modules/account/  → account module
-src/modules/settings/ → settings module
-src/renderer/         → renderer module
-src/main/             → main module
+# Pattern 1: Explicit modules directory
+src/modules/account/     → account module
+src/modules/settings/    → settings module
+src/modules/dashboard/   → dashboard module
+
+# Pattern 2: Direct subdirectories
+src/auth/                → auth module
+src/api/                 → api module
+src/database/            → database module
+
+# Pattern 3: Electron/Desktop apps
+src/renderer/            → renderer module
+src/main/                → main module
+src/preload/             → preload module
+
+# Pattern 4: Python packages
+myproject/auth/          → auth module
+myproject/api/           → api module
+myproject/services/      → services module
 ```
 
-**CRITICAL: You MUST identify affected modules before proceeding.**
+**Exclusions (NOT modules):**
+- `src/utils/`, `src/lib/`, `src/helpers/` → utility directories
+- `src/types/`, `src/interfaces/` → type definition directories
+- `src/constants/`, `src/config/` → configuration directories
+- `tests/`, `__tests__/`, `spec/` → test directories
 
-Example:
+**Algorithm:**
+```bash
+# 1. Get changed files
+git diff --cached --name-only
+
+# 2. Extract module names
+# For each file path:
+#   - Remove common prefixes (src/, lib/, etc.)
+#   - Take first directory component
+#   - Skip if in exclusion list
+#   - Add to modules set
+
+# 3. Result: List of unique module names
+```
+
+**Example:**
 ```bash
 # Changed files:
 src/modules/account/components/LoginForm.tsx
 src/modules/account/services/auth.ts
+src/api/routes/users.py
+src/database/models/user.py
 
 # Identified modules:
-- account
+- account (from src/modules/account/)
+- api (from src/api/)
+- database (from src/database/)
 ```
+
+**If no clear module structure:**
+- Check if project has `docs/modules/` directory
+- If YES: Treat top-level src/ subdirectories as modules
+- If NO: Skip module documentation check (project doesn't use modular docs)
 
 **3. Check if ADR needed:**
 
