@@ -60,7 +60,22 @@ digraph flow_process {
 
 **During Discussion:**
 - Valuable content (analysis, comparisons, evaluations) → auto `context_append`
-- When user decides ("就这样", "选方案A") → `context_decide`
+
+**Step 5: After Brainstorming Completes**
+
+When brainstorming finishes (design doc written, decisions summarized), you MUST:
+
+1. **Record the decision**: Call `context_decide` with:
+   - `decision`: The final decision/approach chosen
+   - `rationale`: Why this approach was chosen
+   - `rejected`: Options that were not chosen
+
+2. **Ask about next steps**:
+   - "是否现在拆分任务？"
+   - If yes: Help split into tasks with `task_create`
+   - If no: "Context 已记录决策，等待认领。"
+
+**CRITICAL:** Do not end the conversation without calling `context_decide`. The context must move from `open` to `decided` status.
 
 ## Examples
 
