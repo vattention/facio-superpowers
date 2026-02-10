@@ -5,8 +5,8 @@
  * Initialize documentation management for AI-assisted development
  *
  * Usage:
- *   npx facio-superpowers init
- *   npx facio-superpowers sync
+ *   npx facio-superpowers init [--project]
+ *   npx facio-superpowers sync [--project]
  */
 
 const fs = require('fs');
@@ -15,6 +15,7 @@ const { execSync } = require('child_process');
 
 const SUPERPOWERS_REPO = 'https://github.com/vattention/facio-superpowers.git';
 const CACHE_DIR = path.join(process.env.HOME, '.facio-superpowers');
+const GLOBAL_SKILLS_DIR = path.join(process.env.HOME, '.claude', 'skills');
 
 // Colors for terminal output
 const colors = {
@@ -39,7 +40,7 @@ function ensureCache() {
   }
 }
 
-function init() {
+function init(projectLevel = false) {
   log('\n🚀 Initializing Facio Superpowers\n', 'green');
 
   // Ensure cache exists
@@ -47,11 +48,18 @@ function init() {
 
   const cwd = process.cwd();
 
+  // Determine skills installation location
+  const skillsMode = projectLevel ? 'project' : 'global';
+  const globalSkillsPath = GLOBAL_SKILLS_DIR;
+  const displaySkillsPath = projectLevel ? '.claude/skills' : '~/.claude/skills';
+
+  log(`📍 Skills mode: ${skillsMode} (${displaySkillsPath})`, 'blue');
+
   // Create directories
-  log('📁 Creating directories...', 'blue');
-  const dirs = [
-    '.claude/skills',
-    '.cursor/skills',
+  log('\n📁 Creating directories...', 'blue');
+
+  // Project-level directories (always created)
+  const projectDirs = [
     'docs/adr',
     'docs/plans',
     'docs/modules',
@@ -60,7 +68,12 @@ function init() {
     'scripts',
   ];
 
-  dirs.forEach(dir => {
+  // Add project-level skill dirs if --project mode
+  if (projectLevel) {
+    projectDirs.unshift('.claude/skills', '.cursor/skills');
+  }
+
+  projectDirs.forEach(dir => {
     const fullPath = path.join(cwd, dir);
     if (!fs.existsSync(fullPath)) {
       fs.mkdirSync(fullPath, { recursive: true });
@@ -70,33 +83,61 @@ function init() {
     }
   });
 
+  // Create global skills directory if needed
+  if (!projectLevel) {
+    if (!fs.existsSync(globalSkillsPath)) {
+      fs.mkdirSync(globalSkillsPath, { recursive: true });
+      log(`  ✓ ~/.claude/skills`, 'green');
+    } else {
+      log(`  - ~/.claude/skills (already exists)`, 'yellow');
+    }
+  }
+
   // Copy skills
   log('\n📚 Installing skills...', 'blue');
-  const skills = ['verification-before-completion', 'prepare-context'];
+
+  // Get all skills from cache
+  const skillsDir = path.join(CACHE_DIR, 'skills');
+  let skills = [];
+  if (fs.existsSync(skillsDir)) {
+    skills = fs.readdirSync(skillsDir).filter(f => {
+      const skillPath = path.join(skillsDir, f);
+      return fs.statSync(skillPath).isDirectory() &&
+             fs.existsSync(path.join(skillPath, 'SKILL.md'));
+    });
+  }
 
   skills.forEach(skill => {
     const src = path.join(CACHE_DIR, 'skills', skill);
-    const claudeDest = path.join(cwd, '.claude/skills', skill);
-    const cursorDest = path.join(cwd, '.cursor/skills', skill);
 
-    if (fs.existsSync(src)) {
-      // Copy to .claude/skills
+    if (projectLevel) {
+      // Project-level: copy to both .claude and .cursor
+      const claudeDest = path.join(cwd, '.claude/skills', skill);
+      const cursorDest = path.join(cwd, '.cursor/skills', skill);
+
       if (fs.existsSync(claudeDest)) {
         fs.rmSync(claudeDest, { recursive: true });
       }
       copyRecursive(src, claudeDest);
 
-      // Copy to .cursor/skills
       if (fs.existsSync(cursorDest)) {
         fs.rmSync(cursorDest, { recursive: true });
       }
       copyRecursive(src, cursorDest);
-
-      log(`  ✓ ${skill}`, 'green');
     } else {
-      log(`  ✗ ${skill} (not found)`, 'red');
+      // Global: copy to ~/.claude/skills only (Cursor also reads this)
+      const globalDest = path.join(globalSkillsPath, skill);
+
+      if (fs.existsSync(globalDest)) {
+        fs.rmSync(globalDest, { recursive: true });
+      }
+      copyRecursive(src, globalDest);
     }
+
+    log(`  ✓ ${skill}`, 'green');
   });
+
+  log(`\n  Total: ${skills.length} skills installed`, 'green');
 
   // Copy templates
   log('\n📄 Installing templates...', 'blue');
@@ -239,36 +280,56 @@ Use \`/verification-before-completion\` skill after making architectural decisio
 
   // Success message
   log('\n✅ Initialization complete!\n', 'green');
+
+  if (!projectLevel) {
+    log('📍 Skills installed globally to ~/.claude/skills', 'green');
+    log('   Works with both Claude Code and Cursor across all projects.\n', 'reset');
+  }
+
   log('Next steps:', 'blue');
   log('1. Review docs/MODULAR-DOCS-GUIDE.md for documentation system overview');
   log('2. Edit CLAUDE.md to add project-specific information');
   log('3. Review CLAUDE-TEAM.md for team standards');
-  log('4. Create module documentation:');
-  log('   mkdir -p docs/modules/your-module');
-  log('   cp templates/MODULE-README.md docs/modules/your-module/README.md');
-  log('5. Start using skills:');
+  log('4. Start using skills:');
+  log('   - /flow (start tracked discussion with facio-flow)');
+  log('   - /brainstorming (explore ideas before implementation)');
   log('   - /prepare-context (before development)');
   log('   - /verification-before-completion (after development)');
   log('\n📚 Documentation: https://github.com/vattention/facio-superpowers\n');
 }
 
-function sync() {
+function sync(projectLevel = false) {
   log('\n🔄 Syncing skills from facio-superpowers\n', 'blue');
 
   ensureCache();
 
   const cwd = process.cwd();
+  const skillsMode = projectLevel ? 'project' : 'global';
+  const displaySkillsPath = projectLevel ? '.claude/skills' : '~/.claude/skills';
+
+  log(`📍 Skills mode: ${skillsMode} (${displaySkillsPath})`, 'blue');
 
   // Sync skills
-  log('📚 Updating skills...', 'blue');
-  const skills = ['verification-before-completion', 'prepare-context'];
+  log('\n📚 Updating skills...', 'blue');
+
+  // Get all skills from cache
+  const skillsDir = path.join(CACHE_DIR, 'skills');
+  let skills = [];
+  if (fs.existsSync(skillsDir)) {
+    skills = fs.readdirSync(skillsDir).filter(f => {
+      const skillPath = path.join(skillsDir, f);
+      return fs.statSync(skillPath).isDirectory() &&
+             fs.existsSync(path.join(skillPath, 'SKILL.md'));
+    });
+  }
 
   skills.forEach(skill => {
     const src = path.join(CACHE_DIR, 'skills', skill);
-    const claudeDest = path.join(cwd, '.claude/skills', skill);
-    const cursorDest = path.join(cwd, '.cursor/skills', skill);
 
-    if (fs.existsSync(src)) {
+    if (projectLevel) {
+      const claudeDest = path.join(cwd, '.claude/skills', skill);
+      const cursorDest = path.join(cwd, '.cursor/skills', skill);
+
       if (fs.existsSync(claudeDest)) {
         fs.rmSync(claudeDest, { recursive: true });
       }
@@ -278,10 +339,19 @@ function sync() {
         fs.rmSync(cursorDest, { recursive: true });
       }
       copyRecursive(src, cursorDest);
+    } else {
+      const globalDest = path.join(GLOBAL_SKILLS_DIR, skill);
 
-      log(`  ✓ ${skill}`, 'green');
+      if (fs.existsSync(globalDest)) {
+        fs.rmSync(globalDest, { recursive: true });
+      }
+      copyRecursive(src, globalDest);
     }
+
+    log(`  ✓ ${skill}`, 'green');
   });
+
+  log(`\n  Total: ${skills.length} skills synced`, 'green');
 
   // Sync templates
   log('\n📄 Updating templates...', 'blue');
@@ -335,20 +405,25 @@ function copyRecursive(src, dest) {
 }
 
 // CLI
-const command = process.argv[2];
+const args = process.argv.slice(2);
+const command = args[0];
+const projectLevel = args.includes('--project');
 
 switch (command) {
   case 'init':
-    init();
+    init(projectLevel);
     break;
   case 'sync':
-    sync();
+    sync(projectLevel);
     break;
   default:
     log('\nFacio Superpowers CLI\n', 'green');
     log('Usage:');
-    log('  npx facio-superpowers init    Initialize project with skills and templates');
-    log('  npx facio-superpowers sync    Sync skills to latest version');
-    log('\n');
+    log('  npx facio-superpowers init              Install skills globally (~/.claude/skills)');
+    log('  npx facio-superpowers init --project    Install skills to project (.claude/skills)');
+    log('  npx facio-superpowers sync              Sync global skills to latest version');
+    log('  npx facio-superpowers sync --project    Sync project skills to latest version');
+    log('\nGlobal skills are shared across all projects (recommended).');
+    log('Project skills are specific to the current project.\n');
     break;
 }
