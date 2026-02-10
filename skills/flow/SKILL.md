@@ -52,12 +52,11 @@ digraph flow_process {
 - Tell user: "Created context [title]. Discussion will be recorded."
 
 **Step 4: Start Brainstorming**
-- **REQUIRED**: Follow `superpowers:brainstorming` process:
-  - Understand current project context first
-  - Ask questions one at a time
-  - Propose 2-3 approaches with trade-offs
-  - Present design in 200-300 word sections
-  - Validate incrementally
+
+**IMPORTANT:**
+- You MUST use the Skill tool to invoke `superpowers:brainstorming` for the discussion process
+- Do NOT enter Claude Code's built-in plan mode (EnterPlanMode)
+- The brainstorming skill provides the structured discussion flow - use it, don't skip it
 
 **During Discussion:**
 - Valuable content (analysis, comparisons, evaluations) → auto `context_append`
