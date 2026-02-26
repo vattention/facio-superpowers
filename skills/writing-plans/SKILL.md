@@ -17,6 +17,29 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
+## Before Writing
+
+**REQUIRED FIRST STEP: Read Coding Conventions**
+
+1. Check for `CODING_CONVENTIONS.md` in the project root
+2. If it exists, read it completely before writing the plan
+3. Apply all conventions from the file to the plan:
+   - File naming patterns
+   - Directory structure requirements
+   - Import conventions and path aliases
+   - Component organization rules
+   - State management patterns
+   - Architecture layers
+   - Logging conventions
+   - TypeScript rules
+   - Any other project-specific standards
+4. **If the file doesn't exist:**
+   - **STOP and warn the user first**
+   - Display: "⚠️ No `CODING_CONVENTIONS.md` found in project root. I'll proceed with general best practices instead of project-specific coding standards."
+   - Ask: "Continue without project coding conventions?"
+   - Wait for user confirmation before proceeding
+   - Only proceed if user confirms
+
 ## Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**

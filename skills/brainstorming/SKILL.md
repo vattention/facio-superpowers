@@ -25,6 +25,14 @@ Start by understanding the current project context, then ask questions one at a 
 - Present options conversationally with your recommendation and reasoning
 - Lead with your recommended option and explain why
 
+- **Before Presenting the design**: Read `CODING_CONVENTIONS.md` from project root if it exists
+  - This file contains project-specific coding standards, file naming, import conventions, architecture patterns
+  - Use these conventions when creating the implementation plan
+  - **If file doesn't exist**: Warn the user and ask for confirmation
+    - Display: "⚠️ No `CODING_CONVENTIONS.md` found in project root. I'll proceed with general best practices."
+    - Ask: "Continue without project-specific coding standards?"
+    - Wait for user confirmation before proceeding
+
 **Presenting the design:**
 - Once you believe you understand what you're building, present the design
 - Break it into sections of 200-300 words
