@@ -1,19 +1,19 @@
 ---
 name: prepare-context
-description: Use before starting development to automatically find and load relevant documentation (ADRs, design docs) as context
+description: Use before starting development to automatically find and load relevant documentation (ADRs, design docs, specs) as context
 ---
 
 # Prepare Context for Development
 
 ## Overview
 
-Before starting any development work, this skill automatically searches for and loads relevant documentation to provide context for AI tools and developers.
+Automatically search for and load relevant documentation before starting development work.
 
 **Core principle:** Don't start coding blind - understand existing decisions and designs first.
 
 ## When to Use
 
-**ALWAYS use before:**
+**Always use before:**
 - Starting a new feature
 - Modifying existing functionality
 - Making architectural changes
@@ -21,160 +21,161 @@ Before starting any development work, this skill automatically searches for and 
 
 **Skip only if:**
 - Trivial changes (typos, formatting)
-- Emergency hotfixes (but review docs after)
+- Emergency hotfixes (review docs after)
 
-## The Process
+## Process
 
 ```
-1. ANALYZE: Understand the task/feature name and scope
-2. LOAD BLUEPRINT CONFIG: Read ~/.facio-flow.json to get blueprintPath
-3. IDENTIFY PRODUCT: Match current project to a blueprint product
-4. SEARCH: Find relevant documents from multiple sources:
-   - facio-blueprint: product contexts (discussions, decisions, proposals, specs)
-   - facio-blueprint: product-level docs (vision.md, gaps.md, spec/)
-   - facio-blueprint: shared/contexts for cross-product topics
-   - Current project: docs/adr/, docs/plans/, .ai/context.md
-5. READ: Load relevant documents
-6. SUMMARIZE: Extract key information
-7. PRESENT: Show findings to user
-8. READY: Proceed with informed context
+1. ANALYZE: Extract keywords from task/feature name
+2. SEARCH BLUEPRINT: Find relevant contexts, specs, and product docs
+3. SEARCH CODEBASE: Find relevant ADRs, plans, and local specs
+4. COMPARE: Check for spec version conflicts
+5. SUMMARIZE: Present findings with key constraints
+6. READY: Proceed with informed context
 ```
 
-## Search Strategy
+## Step 1: Extract Keywords
 
-**1. Extract keywords from task:**
-- Feature name (e.g., "user authentication" → ["user", "auth", "authentication", "login"])
-- Technical terms (e.g., "state management" → ["state", "zustand", "redux", "context"])
-- Domain concepts (e.g., "payment" → ["payment", "stripe", "transaction"])
+From task/feature name, extract:
+- Feature keywords (e.g., "user authentication" → ["auth", "login", "user"])
+- Technical terms (e.g., "state management" → ["state", "store", "zustand"])
+- Domain concepts (e.g., "layout" → ["layout", "L1", "L2", "template"])
 
-**2. Load blueprint config:**
-```bash
-cat ~/.facio-flow.json
-# Extract blueprintPath field
+## Step 2: Search Blueprint
+
+**Goal:** Find relevant context discussions, decisions, and specs from facio-blueprint.
+
+**What to find:**
+- Context discussions related to the task
+- Decisions that constrain implementation
+- Spec documents defining requirements
+- Product-level docs (vision, gaps)
+
+**Constraints:**
+- Limit to top 5 most relevant contexts
+- Prioritize decided/claimed status over open
+- Include product filter if known
+- Check attachments for spec/test-cases artifacts
+
+**Extract from each context:**
+- Title and current status
+- Decision summary (if decided)
+- Acceptance criteria (if any)
+- Related artifacts (spec, test-cases)
+
+## Step 3: Search Codebase
+
+**Goal:** Find relevant technical documentation in current project.
+
+**What to find:**
+- ADRs in `docs/adr/`
+- Design documents in `docs/plans/`
+- Local specs in `docs/specs/`
+
+**Constraints:**
+- Limit to 3 most relevant files
+- Check README indexes first for quick navigation
+
+## Step 4: Spec Conflict Detection
+
+**Goal:** Ensure AI references correct spec version.
+
+**When both blueprint and codebase have specs for the same feature:**
+
+1. Identify if specs exist in both locations
+2. Compare content for significant differences
+3. If different, **ask user which version to reference:**
+
+```
+⚠️ Spec version conflict detected
+
+Found different specs for [{feature}]:
+- Blueprint (latest design)
+- Codebase (current implementation)
+
+Which version should this task reference?
+1. Blueprint - new feature development, implement latest design
+2. Codebase - bugfix, follow current implementation
 ```
 
-**3. Identify current product:**
-- Check git remote URL or project directory name against blueprint product directories
-- List `{blueprintPath}/*/meta.json` to find matching product
-- If ambiguous, ask user which product this project belongs to
+4. If only one exists, or both identical → use directly without asking
 
-**4. Search blueprint contexts (PRIMARY SOURCE):**
-```bash
-# Search product-specific contexts — get matching file paths
-grep -r -l -i "keyword1\|keyword2" {blueprintPath}/{product}/contexts/ 2>/dev/null
-
-# Search shared contexts
-grep -r -l -i "keyword1\|keyword2" {blueprintPath}/shared/contexts/ 2>/dev/null
-```
-
-**Token guardrails for blueprint contexts:**
-- Deduplicate to context directories (multiple matching files in same dir = 1 hit)
-- **Limit to top 5 most relevant context directories** — skip the rest
-- For each context directory, read in this priority order:
-  1. `decision.md` — always read if exists (concise conclusion)
-  2. `proposal.md` / `spec.md` / `interaction-design.md` — read if relevant
-  3. `discussion.md` — **only read if no decision.md exists** (discussions are long)
-
-**5. Read product-level blueprint docs:**
-- `{blueprintPath}/{product}/vision.md` — always read (usually short)
-- `{blueprintPath}/{product}/gaps.md` — always read (usually short)
-- `{blueprintPath}/{product}/spec/` — **do NOT read full spec files**; run `head -60` on candidate files first, then decide if full read is needed
-
-**6. Search current project docs (SECONDARY SOURCE):**
-```bash
-# Search for relevant ADRs
-grep -r -i "keyword1\|keyword2" docs/adr/ --include="*.md" 2>/dev/null
-
-# Search for relevant design/plan documents
-grep -r -i "keyword1\|keyword2" docs/plans/ --include="*.md" 2>/dev/null
-```
-
-**7. Check indexes:**
-- Read `docs/adr/README.md` for ADR index
-- Read `docs/plans/README.md` for design doc index
-
-**Overall token budget:**
-- Blueprint contexts: max 5 dirs × ~1 file each
-- Blueprint product docs: vision.md + gaps.md only
-- Current project docs: max 3 files
-- If you find yourself about to read more than ~10 files total, stop and be more selective
-
-## Output Format
+## Step 5: Output Format
 
 ```markdown
 📚 Context Preparation Complete
 
-## Blueprint: Product Context ({product})
-- [2026-02-14: 属性复制粘贴快捷键]({blueprintPath}/{product}/contexts/2026-02-14-.../decision.md)
-  Summary: 决定使用 Cmd+Shift+C/V 快捷键，避免与系统冲突
-  Type: decision
+## Blueprint Contexts
+- [{title}] - {status}
+  Summary: {decision_summary or discussion_summary}
+  Artifacts: {spec, test-cases if any}
 
-- [2026-02-11: Chat 面板交互工具]({blueprintPath}/{product}/contexts/.../discussion.md)
-  Summary: 正在讨论 interact 工具的交互模式
-  Type: discussion (open)
+## Blueprint Product Docs
+- vision.md: {one-line summary}
+- gaps.md: {relevant gaps}
 
-## Blueprint: Product-Level Docs
-- vision.md: 产品愿景 — 对话式视频编辑 + AI 多模态能力
-- gaps.md: 当前缺口 — 缺少批量操作支持
+## Blueprint Specs
+- {spec_name}: {one-line summary}
 
-## Blueprint: Shared Contexts
-- (none relevant)
+## Codebase ADRs
+- [ADR-001: {title}](path)
+  Summary: {key decision}
 
-## Current Project: Relevant ADRs
-- [ADR-001: Use Zustand for state management](docs/adr/001-use-zustand.md)
-  Summary: Chose Zustand over Redux for simplicity and performance
-
-## Current Project: Design Documents
-- [User Profile Design](docs/plans/2026-01-15-user-profile-design.md)
-  Summary: User profile uses Zustand store
+## Codebase Specs
+- {spec_name}: {comparison status with blueprint}
 
 ## Key Constraints
-- Must follow keyboard shortcut convention from blueprint decision
-- Must use Zustand for state management (ADR-001)
+- {constraint from decision}
+- {constraint from ADR}
+
+## Spec Version Status
+✅ Specs are in sync
+-- or --
+⚠️ Spec conflict detected (see above)
 
 ## Recommendations
 ✅ Proceed with development
-⚠️ Review the relevant blueprint decisions before implementing
+⚠️ Review {specific item} before implementing
 ```
 
-## If No Documents Found
+## If Nothing Found
 
 ```markdown
 📚 Context Preparation Complete
 
 ## Search Results
-No relevant documents found in blueprint or project docs.
+No relevant documents found.
 
 ## Recommendations
 - This might be a new area without prior decisions
-- Consider creating a design document first (use brainstorming skill)
-- Document any new architectural decisions (will be prompted by verification-before-completion)
+- Consider using brainstorming skill to explore design
+- Document any architectural decisions made
 
 ✅ Proceed with development
 ```
+
+## Token Budget Guidelines
+
+To avoid context overflow:
+- Blueprint contexts: max 5, read decision/summary only (not full discussion)
+- Blueprint specs: skim first 60 lines, full read only if relevant
+- Codebase docs: max 3 files
+- Total files: aim for under 10
 
 ## Integration with Other Skills
 
 **Typical workflow:**
 ```
-1. /prepare-context          # Load relevant docs
-2. /brainstorming            # Design (if needed)
+1. /prepare-context          # Load relevant docs (this skill)
+2. /brainstorming            # Design approach (if needed)
 3. /writing-plans            # Create implementation plan
 4. Execute implementation
 5. /verification-before-completion  # Verify and update docs
-```
-
-**Quick workflow (with existing design):**
-```
-1. /prepare-context          # Load relevant docs
-2. /writing-plans            # Create implementation plan
-3. Execute implementation
-4. /verification-before-completion  # Verify and update docs
 ```
 
 ## Remember
 
 - Context is critical for consistent architecture
 - 2 minutes of doc review saves hours of rework
-- AI tools need context to generate appropriate code
+- When specs differ, always ask — don't guess
 - This is not optional - it's part of professional development
