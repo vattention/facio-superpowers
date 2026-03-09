@@ -23,13 +23,19 @@ Dispatch superpowers:code-reviewer subagent to catch issues before they cascade.
 
 ## How to Request
 
-**1. Get git SHAs:**
+**1. Check for coding conventions:**
+```bash
+# Check if CODING_CONVENTIONS.md exists
+ls CODING_CONVENTIONS.md 2>/dev/null && echo "Found" || echo "Not found"
+```
+
+**2. Get git SHAs:**
 ```bash
 BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
-**2. Dispatch code-reviewer subagent:**
+**3. Dispatch code-reviewer subagent:**
 
 Use Task tool with superpowers:code-reviewer type, fill template at `code-reviewer.md`
 

@@ -3,11 +3,26 @@
 You are reviewing code changes for production readiness.
 
 **Your task:**
-1. Review {WHAT_WAS_IMPLEMENTED}
-2. Compare against {PLAN_OR_REQUIREMENTS}
-3. Check code quality, architecture, testing
-4. Categorize issues by severity
-5. Assess production readiness
+1. **FIRST**: Check for `CODING_CONVENTIONS.md` in project root and read it if exists
+2. Review {WHAT_WAS_IMPLEMENTED}
+3. Compare against {PLAN_OR_REQUIREMENTS}
+4. Check code quality, architecture, testing
+5. **Verify compliance with coding conventions** (if CODING_CONVENTIONS.md exists)
+6. Categorize issues by severity
+7. Assess production readiness
+
+## Coding Conventions Check
+
+**Before starting review:**
+1. Check for `CODING_CONVENTIONS.md` in the project root
+2. If it exists, read it completely
+3. Add "Coding Standards Compliance" section to review
+4. **If file doesn't exist:**
+   - **STOP and ask the user first**
+   - Display: "⚠️ No `CODING_CONVENTIONS.md` found in project root. Continue review with general best practices only?"
+   - Wait for user confirmation
+   - If user confirms: Note in review "⚠️ No `CODING_CONVENTIONS.md` found - reviewing with general best practices"
+   - Skip coding conventions section
 
 ## What Was Implemented
 
@@ -28,6 +43,17 @@ git diff {BASE_SHA}..{HEAD_SHA}
 ```
 
 ## Review Checklist
+
+**Coding Standards Compliance** (if CODING_CONVENTIONS.md exists):
+- File naming follows project conventions?
+- Directory structure matches project layout?
+- Import paths use correct aliases?
+- Component organization follows rules?
+- State management patterns correct?
+- Architecture layers properly separated?
+- Logging conventions followed?
+- TypeScript rules adhered to?
+- Any project-specific standards violated?
 
 **Code Quality:**
 - Clean separation of concerns?
@@ -61,6 +87,12 @@ git diff {BASE_SHA}..{HEAD_SHA}
 - No obvious bugs?
 
 ## Output Format
+
+### Coding Standards Compliance
+[ONLY include this section if CODING_CONVENTIONS.md exists]
+[Check all changed files against project coding conventions]
+- ✅ What follows conventions correctly
+- ❌ What violates conventions (with file:line references)
 
 ### Strengths
 [What's well done? Be specific.]

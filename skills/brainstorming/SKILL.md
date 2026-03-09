@@ -52,6 +52,21 @@ Start by understanding the current project context, then ask questions one at a 
 - Use superpowers:using-git-worktrees to create isolated workspace
 - Use superpowers:writing-plans to create detailed implementation plan
 
+**Plan Review (after writing plan):**
+- Review the implementation plan before executing it
+- The reviewer will automatically:
+  - Check for `CODING_CONVENTIONS.md` in project root
+  - Read and apply all project conventions if file exists
+  - Review plan completeness, task granularity, technical approach
+  - Verify plan follows project conventions (file naming, structure, patterns)
+  - **If CODING_CONVENTIONS.md not found**: Ask user for confirmation
+    - Display: "⚠️ No `CODING_CONVENTIONS.md` found in project root. Continue plan review with general best practices only?"
+    - Wait for user confirmation before proceeding
+- Act on review feedback:
+  - Fix Critical issues in the plan immediately
+  - Fix Important issues before execution
+  - Note Minor suggestions for consideration
+
 ## Key Principles
 
 - **One question at a time** - Don't overwhelm with multiple questions
