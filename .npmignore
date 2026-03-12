@@ -12,6 +12,10 @@ docs/
 test/
 *.test.js
 
+# Skill evaluation workspaces
+*-workspace/
+skills/*-workspace/
+
 # IDE
 .vscode/
 .idea/
