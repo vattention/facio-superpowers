@@ -167,4 +167,5 @@ The `FLOW_BRAINSTORMING_COMPLETE` marker signals to the flow skill that brainsto
 - **Explore alternatives** - Always propose 2-3 approaches
 - **Incremental validation** - Get approval before moving on
 - **Artifact over files** - Use `manage_artifact`, not file writes
+- **No fabrication** - Never invent competitor references, industry practices, or technical claims without actual sources. If citing external info, use WebFetch to verify or ask user to provide sources. Say "I don't have information on this" rather than guess.
 - **No implementation** - Never invoke writing-plans or write code
