@@ -17,18 +17,46 @@ Lightweight brainstorming for facio-flow contexts. Guides discussion through cla
 
 This skill is called by the flow skill during context discussions. Do not invoke directly - use `/flow` instead.
 
-## Checklist
+---
 
-You MUST create a task for each of these items and complete them in order:
+## Phase Awareness (Important)
 
-1. **Explore context** - check relevant files, docs, understand the scope
-2. **Offer visual companion** (if topic involves visual questions) - own message, not combined
-3. **Ask clarifying questions** - one at a time, understand purpose/constraints/success criteria
-4. **Propose 2-3 approaches** - with trade-offs and your recommendation
-5. **Present design** - in sections scaled to complexity, get user approval
-6. **Write to context artifact** - call `manage_artifact(contextId, action="add", type="spec", content=design)`
-7. **Spec review loop** - dispatch reviewer subagent, fix issues until approved
-8. **Return design decision** - output structured decision for flow skill to call `context_decide`
+**Context phase is requirements discussion, NOT technical design.** Determine phase by context status:
+
+| Context Status | Phase | Role | Discussion Focus |
+|----------------|-------|------|------------------|
+| open | Requirements | Product Manager | User scenarios, scope, acceptance criteria |
+| decided | Pending claim | - | Requirements locked, awaiting development |
+| claimed | Development | Engineer | Technical approach, architecture, implementation |
+
+### Requirements Phase (open status) - DO NOT
+
+- Discuss specific technical solutions (frameworks, libraries)
+- Discuss architecture (component design, data flow)
+- Discuss implementation details (API design, data structures)
+- Explore codebase for technical approaches
+
+### Requirements Phase (open status) - DO
+
+- Clarify user scenarios: "When would a user use this?"
+- Define scope boundaries: "What cases should this support? Not support?"
+- Define acceptance criteria: "What counts as success?"
+- Explore user value: "What problem does this solve for users?"
+
+---
+
+## Checklist (Requirements Phase)
+
+**For open status contexts.** Complete these steps:
+
+1. **Understand background** - read context description, understand the discussion origin
+2. **Clarify scenarios** - ask about user scenarios, one question at a time
+3. **Define boundaries** - confirm what to support and what not to support
+4. **Define acceptance criteria** - output "what counts as success" checklist
+5. **Write test-cases artifact** - call `manage_artifact(type="test-cases")`
+6. **Return decision** - output requirements summary for flow skill to call `context_decide`
+
+**Note:** Requirements phase does not discuss technical solutions or explore codebase.
 
 ## Process Flow
 
@@ -64,52 +92,43 @@ digraph flow_brainstorming {
 
 **Terminal state:** Return design decision. Do NOT invoke writing-plans or any implementation skill.
 
-## The Process
+## The Process (Requirements Phase)
 
 ### Understanding the Idea
 
-- Check current context (files, docs, recent commits)
+- Read context background description
 - Ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible
 - Focus on: purpose, constraints, success criteria
 
-### Exploring Approaches
+### Clarifying Scenarios
 
-- Propose 2-3 different approaches with trade-offs
-- Lead with your recommended option
-- Explain reasoning for recommendation
+- Ask about specific use cases: "When would users use this?"
+- Confirm boundary cases: "Should this support X?"
+- Understand user expectations: "What result does the user expect?"
 
-### Presenting the Design
+### Defining Acceptance Criteria
 
-- Scale each section to its complexity
-- Ask after each section whether it looks right
-- Cover: architecture, components, data flow, error handling
-- Be ready to go back and clarify
+- List "what counts as success" checklist
+- Each criterion should be verifiable
+- Cover: happy path, edge cases, error handling UX
+- Do NOT include technical implementation details
 
-### Writing to Context Artifact
+### Writing test-cases Artifact
 
-After user approves the design:
+After user confirms acceptance criteria:
 
 ```typescript
-// Call MCP tool to save design as artifact
+// Call MCP tool to save test cases
 manage_artifact({
   contextId: "<current-context-id>",
   action: "add",
-  type: "spec",
-  content: "<full-design-markdown>"
+  type: "test-cases",
+  content: "<acceptance criteria and test cases markdown>"
 })
 ```
 
-**Important:** Get contextId from the conversation context. The flow skill provides it when invoking this skill.
-
-### Spec Review Loop
-
-After writing the artifact:
-
-1. Dispatch spec-document-reviewer subagent with artifact content
-2. If issues found: fix artifact via `manage_artifact`, re-dispatch
-3. If loop exceeds 5 iterations: surface to human
-4. When approved: proceed to return decision
+**Important:** Get contextId from conversation context. The flow skill provides it when invoking this skill.
 
 ## Termination: Return Design Decision
 
