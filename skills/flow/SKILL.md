@@ -54,7 +54,7 @@ digraph flow_process {
 **Step 4: Start Brainstorming**
 
 **IMPORTANT:**
-- You MUST use the Skill tool to invoke `superpowers:brainstorming` for the discussion process
+- You MUST use the Skill tool to invoke `flow-brainstorming` for the discussion process
 - Do NOT enter Claude Code's built-in plan mode (EnterPlanMode)
 - The brainstorming skill provides the structured discussion flow - use it, don't skip it
 
@@ -77,6 +77,9 @@ When brainstorming finishes (design doc written, decisions summarized), you MUST
 
 **CRITICAL:** Do not end the conversation without calling `context_decide`. The context must move from `open` to `decided` status.
 
+**Detecting Completion:**
+When `flow-brainstorming` outputs `FLOW_BRAINSTORMING_COMPLETE`, extract the decision information from the Design Decision Summary block and use it to call `context_decide`.
+
 ## Examples
 
 ```
@@ -95,7 +98,7 @@ User: /flow
 | Component | Role |
 |-----------|------|
 | `/flow` | Explicit trigger + context creation |
-| `brainstorming` | Structured discussion process |
+| `flow-brainstorming` | Structured discussion process (flow-specific) |
 | `context_append` | Auto-records valuable content |
 | `context_decide` | Records final decision |
 | CLAUDE.md rules | Guides when to append/decide |
