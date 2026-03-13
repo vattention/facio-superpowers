@@ -44,9 +44,15 @@ digraph flow_process {
 - If no topic provided, ask: "What would you like to discuss?"
 
 **Step 2: Create Context**
-- Call `context_create` MCP tool:
+- Call `create_context` MCP tool:
   - `title`: The discussion topic
   - `description`: Brief background (ask user if unclear)
+  - `product`: **Required** - specify the product this context belongs to
+
+**Product Validation:**
+- Before creating, verify the product exists via `list_products`
+- If user hasn't specified a product, ask: "这个需求属于哪个产品？"
+- If product doesn't exist, suggest: "产品 [x] 不存在。需要先使用 `create_product` 创建吗？"
 
 **Step 3: Confirm Creation**
 - Tell user: "Created context [title]. Discussion will be recorded."
@@ -79,6 +85,39 @@ When brainstorming finishes (design doc written, decisions summarized), you MUST
 
 **Detecting Completion:**
 When `flow-brainstorming` outputs `FLOW_BRAINSTORMING_COMPLETE`, extract the decision information from the Design Decision Summary block and use it to call `context_decide`.
+
+## Split Rules
+
+**When to Split:**
+Split is triggered by the **developer** (not AI) after `decide` and before `claim`, typically during technical review phase.
+
+**Split Scenarios:**
+
+| Scenario | Action |
+|----------|--------|
+| Single product front+back (one person) | No split needed, use parent product |
+| Single product front+back (team split) | Split: client → parent product, server → facio-server |
+| Generic backend capability | Split: server part → facio-server |
+| Cross-product strategic discussion | Keep in `shared`, no split |
+
+**Split Process:**
+1. Developer explicitly requests split: "需要拆分这个需求"
+2. AI confirms split plan with product assignments
+3. Call `split_context` with child products:
+   ```json
+   {
+     "parentId": "xxx",
+     "children": [
+       { "title": "客户端实现", "description": "...", "product": "video-editor" },
+       { "title": "服务端 API", "description": "...", "product": "facio-server" }
+     ]
+   }
+   ```
+
+**DO NOT:**
+- Proactively suggest split without developer request
+- Guess technical implementation details during PM phase
+- Split contexts that are already claimed
 
 ## Examples
 
