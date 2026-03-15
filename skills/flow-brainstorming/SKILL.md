@@ -1,6 +1,6 @@
 ---
 name: flow-brainstorming
-description: "Flow-specific brainstorming for context discussions. Use when flow skill needs structured discussion that outputs to context artifacts instead of spec files."
+description: "Use when flow skill calls this after create_context or create_followup. Guides requirements discussion (not technical design) and outputs to context artifacts."
 ---
 
 # Flow Brainstorming
@@ -15,7 +15,7 @@ Lightweight brainstorming for facio-flow contexts. Guides discussion through cla
 
 ## When to Use
 
-This skill is called by the flow skill during context discussions. Do not invoke directly - use `/flow` instead.
+This skill is invoked by the flow skill (using Skill tool) after `create_context` or `create_followup` for requirements discussion.
 
 ---
 
