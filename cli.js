@@ -16,6 +16,8 @@ const { execSync } = require('child_process');
 const SUPERPOWERS_REPO = 'https://github.com/vattention/facio-superpowers.git';
 const CACHE_DIR = path.join(process.env.HOME, '.facio-superpowers');
 const GLOBAL_SKILLS_DIR = path.join(process.env.HOME, '.claude', 'skills');
+const CODEX_SKILLS_DIR = path.join(process.env.HOME, '.agents', 'skills');
+const CODEX_SYMLINK = path.join(CODEX_SKILLS_DIR, 'superpowers');
 
 // Colors for terminal output
 const colors = {
@@ -138,6 +140,10 @@ function init(projectLevel = false) {
   });
 
   log(`\n  Total: ${skills.length} skills installed`, 'green');
+
+  // Codex symlink (always global — Codex reads ~/.agents/skills/)
+  log('\n🔗 Setting up Codex integration...', 'blue');
+  setupCodexSymlink();
 
   // Copy templates
   log('\n📄 Installing templates...', 'blue');
@@ -334,6 +340,10 @@ function sync(projectLevel = false) {
 
   log(`\n  Total: ${skills.length} skills synced`, 'green');
 
+  // Codex symlink (ensure it's up to date)
+  log('\n🔗 Checking Codex integration...', 'blue');
+  setupCodexSymlink();
+
   // Sync templates
   log('\n📄 Updating templates...', 'blue');
   const templates = [
@@ -353,6 +363,32 @@ function sync(projectLevel = false) {
   });
 
   log('\n✅ Sync complete!\n', 'green');
+}
+
+function setupCodexSymlink() {
+  const skillsSrc = path.join(CACHE_DIR, 'skills');
+
+  if (!fs.existsSync(CODEX_SKILLS_DIR)) {
+    fs.mkdirSync(CODEX_SKILLS_DIR, { recursive: true });
+  }
+
+  try {
+    const stat = fs.lstatSync(CODEX_SYMLINK);
+    if (stat.isSymbolicLink()) {
+      if (fs.readlinkSync(CODEX_SYMLINK) === skillsSrc) {
+        log('  - ~/.agents/skills/superpowers (already linked)', 'yellow');
+        return;
+      }
+      fs.unlinkSync(CODEX_SYMLINK);
+    } else {
+      fs.rmSync(CODEX_SYMLINK, { recursive: true });
+    }
+  } catch {
+    // Path doesn't exist — proceed to create
+  }
+
+  fs.symlinkSync(skillsSrc, CODEX_SYMLINK);
+  log('  ✓ ~/.agents/skills/superpowers → ~/.facio-superpowers/skills/', 'green');
 }
 
 function copyRecursive(src, dest) {
