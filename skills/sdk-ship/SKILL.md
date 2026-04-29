@@ -1,6 +1,6 @@
 ---
 name: sdk-ship
-description: Use when user wants to publish/ship/release SDK changes, sync SDK to production, update app SDK version, push SDK fix to remote, or says things like "发布sdk", "sdk上线", "把sdk改动同步", "提交sdk", "sdk打包发布", "推到线上" — covers SDK rebase, beta publish, app rebase, and PR creation.
+description: SDK 发布/同步/上线相关操作都用此 skill — "发布sdk"、"sdk上线"、"把sdk改动同步"、"提交sdk"、"sdk打包发布"、"推到线上"、"publish sdk"、"ship sdk"。涵盖 SDK rebase、beta 发布、应用层升级、PR 创建全流程。
 ---
 
 # SDK Ship Flow

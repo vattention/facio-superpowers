@@ -1,6 +1,6 @@
 ---
 name: git-team-protocol
-description: Use when any git operation involves team collaboration — shared branches, merge conflicts, pulling remote changes, reviewing teammate commits, resolving silent overwrites, force-push safety, or establishing team Git rules. Also triggered by "同事改了", "代码被覆盖", "分支冲突", "merge", "pull下来有问题".
+description: 涉及团队协作的 git 操作都用此 skill — 共享分支、merge 冲突、pull 远端改动、review 同事提交、静默覆盖问题、force-push 安全、团队 git 规范。触发词："同事改了"、"代码被覆盖"、"分支冲突"、"merge"、"pull下来有问题"。
 ---
 
 # Git Team Protocol

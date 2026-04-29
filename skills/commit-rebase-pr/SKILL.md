@@ -1,6 +1,6 @@
 ---
 name: commit-rebase-pr
-description: Use for ANY git commit, push, or PR operation — "commit", "提交", "push", "推代码", "提PR", "create PR", "提一个PR", "rebase", "合到main". This is the standard flow for all git operations that move code from local to remote.
+description: 所有 git 提交、推送、PR 操作都用此 skill — "commit"、"提交"、"push"、"推代码"、"提PR"、"create PR"、"rebase"、"合到main"。本地代码推到远端的标准流程。
 ---
 
 # Commit → Rebase → PR
