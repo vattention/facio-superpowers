@@ -1,6 +1,6 @@
 ---
 name: git-team-protocol
-description: Use when multiple people share a branch, a teammate's push silently reverted your deletions or logic, someone did a file-sync commit, or you need to establish team Git collaboration rules to prevent silent overwrites.
+description: Use when any git operation involves team collaboration — shared branches, merge conflicts, pulling remote changes, reviewing teammate commits, resolving silent overwrites, force-push safety, or establishing team Git rules. Also triggered by "同事改了", "代码被覆盖", "分支冲突", "merge", "pull下来有问题".
 ---
 
 # Git Team Protocol

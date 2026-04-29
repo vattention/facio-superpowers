@@ -1,6 +1,6 @@
 ---
 name: commit-rebase-pr
-description: Use when finishing a task on a feature branch and needing to commit changes, rebase onto origin/main, push, and open a PR — the standard branch-to-PR flow for this project.
+description: Use for ANY git commit, push, or PR operation — "commit", "提交", "push", "推代码", "提PR", "create PR", "提一个PR", "rebase", "合到main". This is the standard flow for all git operations that move code from local to remote.
 ---
 
 # Commit → Rebase → PR
