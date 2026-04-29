@@ -3,116 +3,116 @@ name: git-team-protocol
 description: 涉及团队协作的 git 操作都用此 skill — 共享分支、merge 冲突、pull 远端改动、review 同事提交、静默覆盖问题、force-push 安全、团队 git 规范。触发词："同事改了"、"代码被覆盖"、"分支冲突"、"merge"、"pull下来有问题"。
 ---
 
-# Git Team Protocol
+# Git 团队协作规范
 
-## Overview
+## 概述
 
-Git's three-way merge **cannot detect semantic overwrites** — if teammate A pulls your deletion commit then pushes an old file copy, Git sees a "new addition" and accepts it silently. The only defence is process + CI, not Git mechanics.
+Git 的三方合并**无法检测语义级覆盖** — 如果同事 A 拉取了你的删除 commit 后推送了旧文件副本，Git 会认为这是"新增"并静默接受。唯一的防线是流程 + CI，而不是 Git 机制本身。
 
-## Branch Model
+## 分支模型
 
 ```
-main / dev          ← protected, PR-only, no direct push
-feat/<you>/<topic>  ← your personal short-lived branch (≤3 days)
-feat/<shared>       ← team integration branch, also protected
+main / dev          ← 受保护，只能通过 PR 合入，禁止直接推送
+feat/<你>/<主题>     ← 个人短期分支（≤3 天）
+feat/<共享>          ← 团队集成分支，同样受保护
 ```
 
-**Hard rules:**
-- Protected branches: zero direct push, zero force push
-- One branch = one topic = one PR
-- Open a branch → finish → merge → delete. Never let it live > 3 days
+**硬性规则：**
+- 受保护分支：零直推、零强推
+- 一个分支 = 一个主题 = 一个 PR
+- 开分支 → 完成 → 合并 → 删除，不超过 3 天
 
-## Daily Workflow
+## 日常工作流
 
 ```bash
-# Start
+# 开始
 git checkout main && git pull --rebase
-git checkout -b feat/<you>/<topic>
+git checkout -b feat/<你>/<主题>
 
-# Before push — self-check (all 4 required)
-yarn tsc --noEmit                        # 1. types must pass
+# 推送前自检（全部 5 步必做）
+yarn tsc --noEmit                        # 1. 类型检查通过
 git fetch origin
-git diff origin/main...HEAD --name-only  # 2. review scope
-git log origin/main..HEAD --oneline      # 3. confirm commit count sane
-git rebase origin/main                   # 4. stay linear
-yarn tsc --noEmit                        # 5. re-check after rebase
+git diff origin/main...HEAD --name-only  # 2. 确认改动范围
+git log origin/main..HEAD --oneline      # 3. 确认 commit 数量合理
+git rebase origin/main                   # 4. 保持线性历史
+yarn tsc --noEmit                        # 5. rebase 后再查一遍
 
-git push -u origin feat/<you>/<topic>
+git push -u origin feat/<你>/<主题>
 gh pr create --base main
 ```
 
-## Regression Detector (run before every push)
+## 回归检测器（每次推送前必跑）
 
-Catches "my PR silently un-does someone else's recent change":
+检测"我的 PR 是否静默撤销了别人最近的改动"：
 
 ```bash
-# Files recently added to main that my branch removes
+# 我的分支删掉了哪些 main 上最近新增的文件
 git diff origin/main...HEAD --diff-filter=D --name-only
 
-# Lines recently deleted from main that my branch re-adds
+# 我的分支是否加回了 main 上最近删掉的行
 git log --oneline -10 origin/main | awk '{print $1}' | xargs -I{} \
   git diff {}^..{} --unified=0 | grep '^-' | grep -Fxf - \
   <(git diff origin/main...HEAD | grep '^+') | head -20
 ```
 
-If either command returns output: **stop and investigate before pushing.**
+任一命令有输出：**停下来排查，确认无误后再推送。**
 
-Simpler alias to add locally:
+本地快捷别名：
 
 ```bash
 git config --global alias.regcheck \
   "!git fetch origin && git diff origin/main...HEAD --diff-filter=D --name-only && echo '---deleted-check done'"
 ```
 
-## File-Sync Commit Detection
+## 文件同步提交检测
 
-A file-sync commit signature (warn author, request explanation before merging):
+文件同步提交的特征（发现后警告作者，合并前要求解释）：
 
-| Signal | Threshold |
-|--------|-----------|
-| Files changed in one commit | > 15 |
-| Message contains `Sync`, `Update from local`, `Batch` | any |
-| Author machine name in email (`MacBook`, `DESKTOP-`) | any |
-| Diff deletes lines added by a recent merged PR | any |
+| 信号 | 阈值 |
+|------|------|
+| 单次提交改动文件数 | > 15 |
+| 提交信息包含 `Sync`、`Update from local`、`Batch` | 任何 |
+| 作者邮箱含机器名（`MacBook`、`DESKTOP-`） | 任何 |
+| diff 删除了最近已合并 PR 新增的行 | 任何 |
 
-Review checklist for these PRs:
-- Does the diff delete anything merged in the last 5 commits on main?
-- Does the diff re-add any import/file that was explicitly removed?
-- Run `yarn tsc --noEmit` — does it pass?
+审查清单：
+- diff 是否删除了 main 最近 5 个 commit 中合入的内容？
+- diff 是否加回了被明确移除的 import/文件？
+- `yarn tsc --noEmit` 是否通过？
 
-## Conflict Handling Protocol
+## 冲突处理规范
 
-| Conflict type | Rule |
-|---|---|
-| Non-overlapping edits | Both changes survive — verify manually after rebase |
-| You deleted, they re-added | Confirm intent with author before resolving |
-| Both edited same function | Align on requirement, keep both behaviours if needed |
-| They deleted, you rely on it | Create followup task, don't silently restore |
+| 冲突类型 | 处理规则 |
+|----------|----------|
+| 不重叠的编辑 | 两边都保留 — rebase 后手动验证 |
+| 你删了，对方加回来了 | 跟作者确认意图后再解决 |
+| 双方改了同一函数 | 对齐需求，必要时保留双方逻辑 |
+| 对方删了，你依赖它 | 创建 followup 任务，不要静默恢复 |
 
-**Never:** accept-all-ours or accept-all-theirs without reading the diff.
+**禁止：**不看 diff 直接 accept-all-ours 或 accept-all-theirs。
 
-## High-Risk Deletion Protocol
+## 高风险删除规范
 
-For deleting business logic / public APIs / shared utils — add a tombstone comment before the actual removal PR:
+删除业务逻辑 / 公共 API / 共享工具时 — 先在删除 PR 之前提交一个废弃标记：
 
 ```ts
-// DEPRECATED 2026-04-22 @yourname — removing in next PR, do not rely on this
+// DEPRECATED 2026-04-22 @yourname — 下个 PR 移除，请勿依赖
 ```
 
-This forces Git to see a **line change** in any branch that still has the old line, triggering a real conflict instead of a silent overwrite.
+这会迫使 Git 在其他仍使用旧代码的分支上产生**真实冲突**，而不是静默覆盖。
 
-## Branch Protection Settings (GitHub)
+## 分支保护设置（GitHub）
 
-Required for `main` and all `feat/*` integration branches:
+`main` 及所有 `feat/*` 集成分支必须开启：
 
-- ☑ Require PR before merging (approvals ≥ 1)
-- ☑ Dismiss stale approvals on new commits
-- ☑ Require status checks: `ci/tsc`, `ci/lint`
-- ☑ Require branches up to date before merge
-- ☑ Require linear history
-- ☑ Do not allow bypassing (including admins)
+- ☑ 合并前必须 PR（至少 1 人批准）
+- ☑ 新提交后自动撤销过期批准
+- ☑ 必须通过状态检查：`ci/tsc`、`ci/lint`
+- ☑ 合并前分支必须是最新的
+- ☑ 要求线性历史
+- ☑ 不允许绕过（包括管理员）
 
-## Minimal CI Gate
+## 最小 CI 门禁
 
 ```yaml
 # .github/workflows/ci.yml
@@ -131,15 +131,15 @@ jobs:
       - run: yarn lint
 ```
 
-## Red Lines (immediate revert if violated)
+## 红线（违反则立即 revert）
 
-1. Direct push to protected branch
-2. File-sync / whole-directory overwrite commit
-3. `git push --force` on shared branch
-4. Merge without passing CI
-5. Resolving conflict with accept-all without reading diff
-6. PR open > 3 days without merging or closing
+1. 直推受保护分支
+2. 文件同步 / 整目录覆盖提交
+3. 在共享分支上 `git push --force`
+4. 未通过 CI 就合并
+5. 不看 diff 直接全部接受解决冲突
+6. PR 开超过 3 天未合并或关闭
 
-## One-Line Rules to Memorise
+## 一句话记住
 
-> fetch + rebase before push · small commits · delete = tombstone first · all shared branches need PR · CI must pass
+> fetch + rebase 再推 · 小提交 · 删除先标废弃 · 共享分支必须 PR · CI 必须过
