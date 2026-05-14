@@ -18,17 +18,36 @@ Before running this skill:
 
 ## Step 1: Locate spec and detect context
 
-Find the active L2 spec on this branch:
+Bind `$SPEC_PATH` for use by Step 3 dispatch + Sentinel Grep helper. Honor explicit
+override (for synthetic probes / fixture pilots that live outside docs/superpowers/specs/):
 
 ```bash
-find docs/superpowers/specs -name "*.md" | xargs grep -l "^status: implementing" 2>/dev/null | head -1
+if [ -n "$SPEC_PATH" ]; then
+  # Explicit override (e.g. probe under .harness/changes/_m2b-fixtures/synth/<probe>/spec.md)
+  test -f "$SPEC_PATH" || { echo "✗ SPEC_PATH override invalid: $SPEC_PATH"; exit 1; }
+else
+  # Default: discover in conventional path
+  SPEC_PATH=$(find docs/superpowers/specs -name "*.md" \
+    | xargs grep -l "^status: implementing" 2>/dev/null | head -1)
+fi
+
+if [ -z "$SPEC_PATH" ]; then
+  echo "ℹ No implementing-status L2 spec found → treat as Micro (context-only change); inline review per Step 3 Micro path"
+  SPEC_PATH=""   # downstream Step 3 Micro path tolerates empty
+fi
 ```
 
-If no spec found → treat as Micro (context-only change); run inline review per Step 3 Micro path.
+Parse from `$SPEC_PATH` (when non-empty); **prefer frontmatter `change_id`** to allow
+synthetic probes outside `docs/superpowers/specs/` to declare canonical change IDs:
 
-Parse from the found spec:
-- `CHANGE_ID`: spec filename without `.md` (e.g. `2026-05-14-add-fast-forward`)
-- `SPEC_TIER`: value from §6 Pipeline Tier section (`Large` / `Normal` / `Micro`)
+```bash
+CHANGE_ID=$(grep -E '^change_id:' "$SPEC_PATH" 2>/dev/null | head -1 | awk '{print $2}')
+[ -z "$CHANGE_ID" ] && CHANGE_ID=$(basename "$SPEC_PATH" .md)
+SPEC_TIER=$(grep -E '^tier:' "$SPEC_PATH" | head -1 | awk '{print $2}')
+# Fallback: read tier from §6 body if frontmatter absent
+[ -z "$SPEC_TIER" ] && SPEC_TIER=$(sed -n '/## §6 Pipeline Tier/,/^## /p' "$SPEC_PATH" \
+  | grep -oE "Micro|Normal|Large" | head -1)
+```
 
 ## Step 2: Check iteration counter vs max
 
@@ -111,31 +130,64 @@ Wait for **both** tasks to complete before Step 4.
 
 ### Large — parallel dispatch (up to 3 evaluators)
 
-Detect UI changes:
+**UI file detection (default heuristic + frontmatter override)**:
+
 ```bash
-UI_FILE_COUNT=$(git diff --name-only $BASE_SHA $HEAD_SHA \
-  | grep -E "\.tsx$|\.vue$|\.css$|\.scss$|/components/|/pages/|/styles/" \
+# Default: heuristic file globs from git diff
+UI_FILE_COUNT=$(git diff --name-only "$BASE_SHA".."$HEAD_SHA" \
+  | grep -E "\.tsx$|\.vue$|\.jsx$|\.css$|\.scss$|\.html$|/components/|/pages/|/styles/|/views/|/templates/" \
   | wc -l | tr -d ' ')
+
+# Override: spec frontmatter `ui_change: true` forces dispatch even if file globs miss
+# (for non-webapp repos / fixture testing / WIP UI in non-conventional path)
+UI_FRONTMATTER_FORCE=0
+if [ -n "$SPEC_PATH" ]; then
+  UI_FRONTMATTER_FORCE=$(grep -E "^ui_change:[[:space:]]*true" "$SPEC_PATH" | wc -l | tr -d ' ')
+fi
+
+if [ "$UI_FILE_COUNT" -gt 0 ] || [ "$UI_FRONTMATTER_FORCE" -gt 0 ]; then
+  UI_DISPATCH_REASON="UI_FILE_COUNT=$UI_FILE_COUNT, frontmatter_override=$UI_FRONTMATTER_FORCE"
+else
+  UI_DISPATCH_REASON="skipped: UI_FILE_COUNT=0 AND no ui_change: true frontmatter"
+fi
 ```
 
-In a **single message**, dispatch in parallel:
+**Frontmatter contract**:
+- `ui_change: true` in L2 spec frontmatter → force ui-evaluator dispatch (regardless of file globs)
+- `ui_change: false` (default if absent) → fall back to git diff file detection
+- 适用场景：fixture pilot in non-webapp repo / WIP UI in non-conventional dir / 维护期需 ui-evaluator 复审但当前 PR 无 UI diff
 
-**Task A — Code review:** Same as Normal.
+In a **single message**, dispatch in parallel via 3 Task tool calls:
 
-**Task B — Harness evaluation:** Same as Normal but `{TIER}` → Large.
+**Task A — Code review:** Same as Normal (invoke `Skill(requesting-code-review)`).
 
-**Task C — UI evaluation** (only if `UI_FILE_COUNT > 0`):
-Read template at `skills/expert-reviewer/ui-evaluator.md` (globally: `~/.claude/skills/expert-reviewer/ui-evaluator.md`).
+**Task B — Harness evaluation:** Same as Normal but `{TIER}` → Large (read template
+at `~/.claude/skills/expert-reviewer/harness-evaluator.md`, substitute placeholders,
+dispatch via Task tool with `general-purpose` agent).
 
-Fill placeholders:
-- `{SPEC_PATH}` → path to L2 spec.md
-- `{CHANGE_ID}` → $CHANGE_ID
-- `{BASE_SHA}` → $BASE_SHA
-- `{HEAD_SHA}` → $HEAD_SHA
+**Task C — UI evaluation** (only if `UI_DISPATCH_REASON` does NOT start with `skipped`):
 
-Dispatch as Task tool with `general-purpose` agent.
+1. **Read template**: load `~/.claude/skills/expert-reviewer/ui-evaluator.md`
+2. **Substitute placeholders** in the template body:
+   - `{SPEC_PATH}` ← `$SPEC_PATH`
+   - `{CHANGE_ID}` ← `$CHANGE_ID`
+   - `{BASE_SHA}` ← `$BASE_SHA`
+   - `{HEAD_SHA}` ← `$HEAD_SHA`
+   - `{TIER}` ← `$SPEC_TIER`
+   - `{ITERATION}` ← `$NEXT_N`
+3. **Dispatch via Task tool**: invoke a `general-purpose` subagent with the substituted
+   template body as its prompt; description ~10-15 words; **send in parallel** with
+   Tasks A + B — same message, 3 Task tool calls in one block
+4. **Capture output**: when subagent returns, save its full text response as `$UI_OUTPUT`
+   (used in Step 4 aggregation `## UI Evaluator Notes` paste-here block)
 
-If `UI_FILE_COUNT = 0` → skip Task C; note in summary "ui-evaluator skipped: no UI files in diff".
+If `UI_DISPATCH_REASON` starts with `skipped`:
+
+```bash
+UI_OUTPUT="(ui-evaluator skipped — $UI_DISPATCH_REASON)"
+```
+
+Set this directly without dispatch; record reason in Step 4 review-N.md `## UI Evaluator Notes` section.
 
 Wait for all dispatched tasks before Step 4.
 
