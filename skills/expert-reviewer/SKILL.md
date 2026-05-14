@@ -95,7 +95,7 @@ Invoke `Skill(requesting-code-review)` with:
 - Brief description of what was implemented (read from spec §1 goal)
 
 **Task B — Harness evaluation:**
-Read the template file at `skills/expert-reviewer/harness-evaluator.md` (relative to the skill base directory, globally installed at `~/.claude/skills/facio-superpowers/expert-reviewer/harness-evaluator.md`).
+Read the template file at `skills/expert-reviewer/harness-evaluator.md` (relative to the skill base directory, globally installed at `~/.claude/skills/expert-reviewer/harness-evaluator.md`).
 
 Fill these placeholders in the template:
 - `{SPEC_PATH}` → path to L2 spec.md
@@ -125,7 +125,7 @@ In a **single message**, dispatch in parallel:
 **Task B — Harness evaluation:** Same as Normal but `{TIER}` → Large.
 
 **Task C — UI evaluation** (only if `UI_FILE_COUNT > 0`):
-Read template at `skills/expert-reviewer/ui-evaluator.md` (globally: `~/.claude/skills/facio-superpowers/expert-reviewer/ui-evaluator.md`).
+Read template at `skills/expert-reviewer/ui-evaluator.md` (globally: `~/.claude/skills/expert-reviewer/ui-evaluator.md`).
 
 Fill placeholders:
 - `{SPEC_PATH}` → path to L2 spec.md
