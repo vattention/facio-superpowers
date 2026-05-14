@@ -136,21 +136,21 @@ For each linked Knowledge note file, update its §C.4 frontmatter (NOT capabilit
 NOTE_PATH="docs/reference/decisions/some-decision.md"
 
 # Read current values
-REF_COUNT=$(grep "^ref_count:" $NOTE_PATH | awk '{print $2}')
-MATURITY=$(grep "^maturity:" $NOTE_PATH | awk '{print $2}')
+REF_COUNT=$(grep "^ref_count:" "$NOTE_PATH" | awk '{print $2}')
+MATURITY=$(grep "^maturity:" "$NOTE_PATH" | awk '{print $2}')
 NEW_COUNT=$((REF_COUNT + 1))
 
 # Update ref_count and last_referenced (macOS sed)
-sed -i '' "s/^ref_count: .*/ref_count: $NEW_COUNT/" $NOTE_PATH
-sed -i '' "s/^last_referenced: .*/last_referenced: $TODAY/" $NOTE_PATH
+sed -i '' "s/^ref_count: .*/ref_count: $NEW_COUNT/" "$NOTE_PATH"
+sed -i '' "s/^last_referenced: .*/last_referenced: $TODAY/" "$NOTE_PATH"
 
 # Maturity auto-promotion
 if [ "$MATURITY" = "draft" ] && [ "$NEW_COUNT" -ge 1 ]; then
-  sed -i '' "s/^maturity: draft/maturity: verified/" $NOTE_PATH
+  sed -i '' "s/^maturity: draft/maturity: verified/" "$NOTE_PATH"
   echo "Promoted $NOTE_PATH: draft → verified (ref_count=$NEW_COUNT)"
 fi
 if [ "$MATURITY" = "verified" ] && [ "$NEW_COUNT" -ge 2 ]; then
-  sed -i '' "s/^maturity: verified/maturity: proven/" $NOTE_PATH
+  sed -i '' "s/^maturity: verified/maturity: proven/" "$NOTE_PATH"
   echo "Promoted $NOTE_PATH: verified → proven (ref_count=$NEW_COUNT)"
 fi
 ```
@@ -184,9 +184,11 @@ In Claude Code session: use the `mcp__facio-flow__notify_spec_event` tool with `
 ## Step 6: Commit all changes
 
 ```bash
-git add $SPEC_PATH
-git add docs/reference/capabilities/
-git add docs/reference/decisions/ docs/reference/guidelines/ docs/reference/pitfalls/
+git add "$SPEC_PATH"
+[ -d docs/reference/capabilities ] && git add docs/reference/capabilities/
+for dir in docs/reference/decisions docs/reference/guidelines docs/reference/pitfalls; do
+  [ -d "$dir" ] && git add "$dir/"
+done
 git status  # confirm no accidental files staged
 
 git commit -m "chore(l1-updater): archive $CHANGE_ID — apply §5 L1 Impact + update ref_count"
