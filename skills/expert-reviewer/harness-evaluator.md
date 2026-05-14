@@ -76,17 +76,43 @@ Task tool (general-purpose):
 
     ## Item 14 · AC Coverage
 
-    Read spec §1 (product perspective). List every Acceptance Criterion (AC).
+    Read spec §1 (product perspective — `Given / When / Then` rows in scenarios table).
+    List every Acceptance Criterion (AC).
 
-    For each AC, verify an automated test exists:
+    For each AC, verify an **automated test** exists in the diff.
+
+    **"Automated test" 定义（v2 / codex finding #5 文档化）**:
+    - ✅ Acceptable: unit test / integration test / e2e test in any of the following frameworks:
+      - Node.js: `node:test` built-in（since Node 18）/ `vitest` / `jest` / `mocha` / `ava`
+      - Python: `pytest` / `unittest`
+      - Browser: `playwright` / `cypress` / `vitest --browser`
+      - Other: any framework with deterministic exit code + machine-readable output
+    - ❌ NOT acceptable as Item 14 evidence:
+      - 手动 CLI behavior probe (`node script.mjs && verify stdout`)
+      - manual screenshot diff
+      - `git status --porcelain` 状态检查
+      - **理由**: M2 chain 要求 review iteration 可机器复跑；CLI smoke 缺 deterministic exit + machine output
+      - **轻例外**：unit smoke 已包含在自动化测试框架内（例如 `node:test` 调 CLI）
+
+    **Test discovery heuristic**:
+    - Look for `tests/`, `test/`, `__tests__/`, `*.test.{ts,tsx,js,jsx,mjs,cjs,py,vue}`, `*_test.py`, `spec/`
+    - Verify diff 含 (a) test 新增 / (b) test 修改 / 至少其一 — 单纯改 implementation 不补 test = FAIL
+
     ```bash
-    git diff --name-only {BASE_SHA}..{HEAD_SHA} | grep -E "test|\.spec\."
+    git diff --name-only {BASE_SHA}..{HEAD_SHA} \
+      | grep -E "(^|/)(tests?|__tests__|spec)/|\.test\.|\.spec\.|_test\.py$"
     ```
     Cross-reference test filenames/descriptions against each AC description.
 
+    **Pass criteria**:
+    - 每条 AC（§1 Given/When/Then row）能 trace 到 ≥1 测试 case 名（grep by AC keywords）
+    - 测试 case in diff 或在 base branch 已存在但被 implementation 修改路径覆盖到
+
     **Output:**
-    - MUST FIX if any AC has no automated test
+    - MUST FIX if any AC has no automated test in the above-acceptable set
     - PASS if all ACs are covered (or spec has no ACs — check §1 explicitly)
+
+    **FAIL response**: 标 MUST FIX；reviewer 在 review-N.md "## MUST FIX" 段列出"AC #N 无 automated test"。
 
     ---
 
