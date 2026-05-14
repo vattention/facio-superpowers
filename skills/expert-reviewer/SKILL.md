@@ -261,18 +261,64 @@ git add .harness/changes/$CHANGE_ID/review-$NEXT_N.md
 git commit -m "chore(review): iteration $NEXT_N for $CHANGE_ID"
 ```
 
-## Step 5: Hint next step
+## Step 5: Emit review result
 
 **If result = PASS (no MUST FIX):**
-> "Review iteration $NEXT_N complete — no blocking issues.
-> Next: create PR via `gh pr create --repo vattention/<repo> --base main`
-> After merge: run `l1-updater` skill to apply §5 L1 Impact and archive spec."
 
-**If result = MUST_FIX:**
-> "Review iteration $NEXT_N found MUST FIX items (listed above).
-> Fix the issues, then re-run `expert-reviewer` (will be iteration $((NEXT_N+1))).
-> Max for $SPEC_TIER: Micro=1 / Normal=2-3 / Large=3-5."
+```
+✓ Review iteration $NEXT_N complete — no MUST FIX issues.
+  - .harness/changes/$CHANGE_ID/review-$NEXT_N.md written
+  - Tier: $SPEC_TIER (UI dispatch reason: $UI_DISPATCH_REASON)
+  - SHOULD items: $SHOULD_COUNT (optional follow-up)
+  - INFO items: $INFO_COUNT (advisory only)
 
-**If NEXT_N >= max:**
-> "Max iterations reached for $SPEC_TIER tier.
-> Escalate to human — see `.harness/changes/$CHANGE_ID/review-escalation.md`."
+Flow HARD-GATE R4 will pick up after PR merge:
+  - Persist PR meta to .harness/changes/$CHANGE_ID/pr.md (number + URL + merge_commit_sha)
+  - spec-status.mjs write implementing → merged (in post-merge follow-up PR, NOT direct main)
+  - notify_spec_event(merged)
+  - invoke l1-updater
+```
+
+**If result = MUST_FIX AND iteration $NEXT_N < max for tier:**
+
+```
+✗ Review iteration $NEXT_N found MUST FIX items:
+  - .harness/changes/$CHANGE_ID/review-$NEXT_N.md (see "## MUST FIX" section)
+  - Iteration $NEXT_N of max for $SPEC_TIER tier (Micro=1 / Normal=2-3 / Large=3-5)
+
+Flow HARD-GATE R3b will pick up:
+  - Invoke superpowers:subagent-driven-development in resume mode
+  - Goal: "fix the MUST FIX items listed in review-$NEXT_N.md"
+  - After fix + commit, R3 re-fires → expert-reviewer iter $((NEXT_N+1))
+```
+
+**If MUST_FIX AND $NEXT_N >= max iteration for tier:**
+
+```
+✗ Max iterations reached for $SPEC_TIER tier ($NEXT_N / max).
+  - .harness/changes/$CHANGE_ID/review-escalation.md written
+  - Flow HARD-GATE R4-fail halts chain — no auto-invoke of executing-plans or l1-updater
+
+Human decision required (Flow R4-fail message):
+  (a) Human reviewer override MUST FIX → manually continue to PR
+  (b) Spec amendment / rescope → may require implementing → draft regression (spec §A.3)
+```
+
+## After Step 5 · Hint Chain
+
+```
+Outcome routed by Flow Skill HARD-GATE:
+  - PASS + PR merged → R4 (l1-updater archives spec + applies §5 L1 Impact)
+  - MUST FIX + iter < max → R3b (executing-plans resume; counter++; auto re-invoke)
+  - MUST FIX + iter ≥ max → R4-fail (halt; human decision)
+```
+
+<HARD-GATE>
+Do NOT invoke `l1-updater` yourself. Flow Skill HARD-GATE R4 owns post-merge transition.
+Do NOT invoke `subagent-driven-development` or `executing-plans` yourself for MUST FIX
+loop. Flow Skill HARD-GATE R3b owns the resume routing.
+Do NOT call `spec-status.mjs write` yourself. expert-reviewer is read-only on spec
+frontmatter — it only writes `.harness/changes/<change_id>/review-<N>.md` and
+`review-escalation.md`.
+Do NOT create the PR yourself — that's a human checkpoint (CODEOWNERS review).
+</HARD-GATE>
