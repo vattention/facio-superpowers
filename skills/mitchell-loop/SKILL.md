@@ -63,7 +63,9 @@ fi
 
 ```bash
 GUIDELINES_DIR="docs/reference/guidelines"
-NEXT_ID=$(grep -h "^id: K-guidelines-" "$GUIDELINES_DIR"/*.md 2>/dev/null \
+# Note: regex requires 3 digits to exclude `K-guidelines-NNN` placeholder in
+# guidelines/README.md template (surfaced during M4a Task 9 fixture probe).
+NEXT_ID=$(grep -hE "^id: K-guidelines-[0-9]{3}" "$GUIDELINES_DIR"/*.md 2>/dev/null \
   | sed -E 's/^id: K-guidelines-0*([0-9]+).*/\1/' \
   | sort -n | tail -1)
 NEXT_ID=$((${NEXT_ID:-0} + 1))
