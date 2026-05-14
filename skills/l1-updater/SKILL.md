@@ -13,6 +13,28 @@ Post-merge ARCHIVE subtask. Run after the PR is merged on main.
 - You are on main branch (or the merge commit)
 - Spec status = `merged` (verify below)
 
+## Sentinel Grep Range (Inline — Self-Contained)
+
+```bash
+# 默认 grep 范围（覆盖典型项目布局：业务代码 src/ + 工程脚本 scripts/）
+SENTINEL_PATHS_DEFAULT="src/ scripts/"
+
+# Override: spec frontmatter sentinel_paths 可覆盖默认（YAML 数组形式）
+SENTINEL_PATHS_OVERRIDE=""
+if [ -n "$SPEC_PATH" ]; then
+  SENTINEL_PATHS_OVERRIDE=$(grep -A 10 "^sentinel_paths:" "$SPEC_PATH" 2>/dev/null \
+    | grep -E "^[[:space:]]+-[[:space:]]" \
+    | sed -E "s/^[[:space:]]+-[[:space:]]+//" | tr '\n' ' ')
+fi
+SENTINEL_PATHS="${SENTINEL_PATHS_OVERRIDE:-$SENTINEL_PATHS_DEFAULT}"
+
+# Inline grep (self-contained; l1-updater runs as its own skill — no shared helper)
+grep -r "@capability: $CAPABILITY_ID" $SENTINEL_PATHS \
+  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+  --include="*.mjs" --include="*.cjs" --include="*.py" --include="*.vue" \
+  2>/dev/null
+```
+
 ## Step 1: Find the spec
 
 ```bash
@@ -91,9 +113,13 @@ last_updated: TODAY_PLACEHOLDER
 
 > **Do NOT add** `ref_count`, `last_referenced`, or `source` to this file — those are §C.4 Knowledge note fields. L1 capability spec and Knowledge note schemas are separate.
 
-Then plant the sentinel in code (done during implementation, but verify it exists):
+Then plant the sentinel in code (done during implementation, but verify it exists). Uses `SENTINEL_PATHS` from Sentinel Grep Range section above:
 ```bash
-grep -r "@capability: <capability-id>" src/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py"
+CAPABILITY_ID="<capability-id>"
+grep -r "@capability: $CAPABILITY_ID" $SENTINEL_PATHS \
+  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+  --include="*.mjs" --include="*.cjs" --include="*.py" --include="*.vue" \
+  2>/dev/null
 ```
 If missing → write a follow-up note (do not block archival; implementation should have planted it).
 

@@ -16,6 +16,30 @@ Before running this skill:
 - Code committed to feature branch
 - `verification-before-completion` upstream skill already run
 
+## Sentinel Grep Range (inline; do NOT extract into shared shell helper — see harness-evaluator.md / l1-updater/SKILL.md 各自有独立副本)
+
+```bash
+# 默认 grep 范围（覆盖典型项目布局：业务代码 src/ + 工程脚本 scripts/）
+SENTINEL_PATHS_DEFAULT="src/ scripts/"
+
+# Override: spec frontmatter sentinel_paths 可覆盖默认（YAML 数组形式）
+SENTINEL_PATHS_OVERRIDE=""
+if [ -n "$SPEC_PATH" ]; then
+  SENTINEL_PATHS_OVERRIDE=$(grep -A 10 "^sentinel_paths:" "$SPEC_PATH" 2>/dev/null \
+    | grep -E "^[[:space:]]+-[[:space:]]" \
+    | sed -E "s/^[[:space:]]+-[[:space:]]+//" | tr '\n' ' ')
+fi
+SENTINEL_PATHS="${SENTINEL_PATHS_OVERRIDE:-$SENTINEL_PATHS_DEFAULT}"
+
+# Inline grep (use directly, do NOT extract into a shell function — this block lives
+# in 3 separate files: expert-reviewer/SKILL.md, harness-evaluator.md, l1-updater/SKILL.md,
+# and harness-evaluator.md is dispatched to a fresh subagent that cannot inherit shell fns.)
+grep -r "@capability: $CAPABILITY_ID" $SENTINEL_PATHS \
+  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+  --include="*.mjs" --include="*.cjs" --include="*.py" --include="*.vue" \
+  2>/dev/null
+```
+
 ## Step 1: Locate spec and detect context
 
 Bind `$SPEC_PATH` for use by Step 3 dispatch + Sentinel Grep helper. Honor explicit
@@ -94,9 +118,12 @@ git diff --name-only $BASE_SHA $HEAD_SHA | grep -E "test|spec\."
 ```
 Confirm each AC has at least one related test file in the diff.
 
-**Item 15 — §5 L1 Impact sentinel:** Read spec §5. For each ADDED capability, verify:
+**Item 15 — §5 L1 Impact sentinel:** Read spec §5. For each ADDED capability, verify (use `SENTINEL_PATHS` defined in Sentinel Grep Range section above):
 ```bash
-grep -r "@capability: CAPABILITY_ID" src/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py"
+grep -r "@capability: $CAPABILITY_ID" $SENTINEL_PATHS \
+  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+  --include="*.mjs" --include="*.cjs" --include="*.py" --include="*.vue" \
+  2>/dev/null
 ```
 
 **Item 17 — Role-binding (soft warn only):** Read `role:` from spec frontmatter. Compare changed paths. Note mismatch as INFO, never block.
