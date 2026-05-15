@@ -1,5 +1,35 @@
 # Superpowers Release Notes
 
+## v2.3.1 (2026-05-15)
+
+### Fixed — freshness-anchor-check workflow 终于下发到产品 repo
+
+**问题**：M3 上线 `freshness-anchor-check` skill 时，workflow `freshness-anchor-check.yml` 只装到了 facio-blueprint 本地，没进 superpowers `templates/`。产品 repo 跑 sync 拿到 skill 但拿不到 CI runner —— 知道规矩但没守门人，违背 spec §6.5 ambient CI 意图。
+
+**修复**：
+- 新增 `templates/github-workflows-freshness-anchor-check.yml`（从 blueprint 拷贝，内容是通用 generic 逻辑）
+- `TEMPLATE_MANIFEST` 加 `phase: sync` 条目；产品 repo `init` / `sync` 都会拿到
+- 产品 repo `.github/workflows/` 现在有 4 个 workflow：`catalog-sync` / `spec-sync` / `mitchell-loop` / `freshness-anchor-check`
+
+### Added — `sync` 增加 baseline 脏文件 fail-fast 保护
+
+**问题**：v2.3.0 sync 命令默认覆盖 10 条 team-baseline 文件（pipeline / gates / workflows / harness 脚本）。如果消费仓在这些文件上有未提交编辑，sync 会**静默 clobber**。
+
+**改动**：
+- sync 启动时检测 sync-phase 目标文件的 `git status --porcelain`，发现 dirty 直接 fail-fast 列文件 + 指引（`git stash` / `git commit` / `--force`）
+- 新增 `--force` flag bypass（会带 warning 列出将被覆盖的文件）
+- 非 git 仓库 / 未跟踪文件 → 自动跳过检查
+- `init-only` / `ci-managed` 文件不在检查范围（本来就不覆盖）
+
+**升级路径**：
+```bash
+# 已 init 项目直接 sync 拉新（带保护）
+npx @vattention/facio-superpowers@2.3.1 sync
+
+# 如确认要覆盖本地编辑
+npx @vattention/facio-superpowers@2.3.1 sync --force
+```
+
 ## v2.3.0 (2026-05-15)
 
 ### Changed — `sync` 真正能拉到 harness 全套
