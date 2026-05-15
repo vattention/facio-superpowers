@@ -1,0 +1,122 @@
+name: Freshness Anchor Check
+
+on:
+  pull_request:
+    paths:
+      - 'docs/reference/capabilities/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'docs/superpowers/specs/**'
+
+jobs:
+  anchor-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve TIER as max-strictness across all changed L2 specs (default Normal)
+        id: tier
+        run: |
+          # Codex Round 1 SHOULD #2: scan ALL changed specs, pick max strictness
+          # (Large > Normal > Micro). Old behavior (head -1) misclassified multi-spec PRs.
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_SPECS=$(git diff --name-only "$BASE_SHA".."$HEAD_SHA" \
+            -- 'docs/superpowers/specs/*.md' 2>/dev/null)
+          TIER="Normal"  # default if no spec changed
+          MAX_RANK=2     # Normal=2; Large=3; Micro=1
+          tier_rank() { case "$1" in Micro) echo 1 ;; Normal) echo 2 ;; Large) echo 3 ;; *) echo 2 ;; esac; }
+          if [ -n "$CHANGED_SPECS" ]; then
+            MAX_RANK=0
+            for SPEC in $CHANGED_SPECS; do
+              T=$(grep -E "^tier:" "$SPEC" 2>/dev/null | head -1 | awk '{print $2}')
+              case "$T" in Micro|Normal|Large) ;; *) T="Normal" ;; esac
+              R=$(tier_rank "$T")
+              if [ "$R" -gt "$MAX_RANK" ]; then
+                MAX_RANK=$R
+                TIER=$T
+              fi
+            done
+            [ "$MAX_RANK" -eq 0 ] && TIER="Normal"
+          fi
+          echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+          echo "Resolved TIER=$TIER (max-strictness across $(echo "$CHANGED_SPECS" | wc -w) changed spec(s))"
+
+      - name: Sentinel grep range (default src/ + scripts/)
+        id: paths
+        run: echo "paths=src/ scripts/" >> "$GITHUB_OUTPUT"
+
+      - name: Scan anchors and detect drift
+        env:
+          TIER: ${{ steps.tier.outputs.tier }}
+          SENTINEL_PATHS: ${{ steps.paths.outputs.paths }}
+        run: |
+          set -uo pipefail
+          BROKEN_COUNT=0
+          STALE_COUNT=0
+          BROKEN_LOG=""
+          STALE_LOG=""
+
+          CAPS=$(find docs/reference/capabilities -name "*.md" -not -name "README.md" 2>/dev/null)
+          if [ -z "$CAPS" ]; then
+            echo "ℹ no capability specs; nothing to check"
+            exit 0
+          fi
+
+          for CAP_FILE in $CAPS; do
+            CAP_ID=$(awk '/^---$/ { in_fm = !in_fm; next } in_fm && /^id:/ { sub(/^id:[[:space:]]*/, ""); print; exit }' "$CAP_FILE")
+            CAP_LAST=$(awk '/^---$/ { in_fm = !in_fm; next } in_fm && /^last_updated:/ { sub(/^last_updated:[[:space:]]*/, ""); print; exit }' "$CAP_FILE")
+            ANCHORS=$(awk '
+              /^---$/ { in_fm = !in_fm; next }
+              in_fm && /^anchors:/ { in_a = 1; next }
+              in_fm && in_a && /^[a-zA-Z]/ { in_a = 0 }
+              in_fm && in_a && /^[[:space:]]+-[[:space:]]/ { sub(/^[[:space:]]+-[[:space:]]+/, ""); print }
+            ' "$CAP_FILE")
+
+            for ANCHOR in $ANCHORS; do
+              FILES=$(grep -rl "@capability: $ANCHOR" $SENTINEL_PATHS \
+                --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+                --include="*.mjs" --include="*.cjs" --include="*.py" --include="*.vue" \
+                2>/dev/null || true)
+              if [ -z "$FILES" ]; then
+                BROKEN_COUNT=$((BROKEN_COUNT + 1))
+                BROKEN_LOG="${BROKEN_LOG}- ${CAP_ID} :: ${ANCHOR} no sentinel"$'\n'
+                continue
+              fi
+              for F in $FILES; do
+                SLC=$(git log -1 --format=%cs -- "$F" 2>/dev/null || echo "")
+                if [ -n "$SLC" ] && [ -n "$CAP_LAST" ] && [ "$SLC" \> "$CAP_LAST" ]; then
+                  STALE_COUNT=$((STALE_COUNT + 1))
+                  STALE_LOG="${STALE_LOG}- ${CAP_ID} :: ${ANCHOR} in ${F} (${SLC} > ${CAP_LAST})"$'\n'
+                fi
+              done
+            done
+          done
+
+          echo "Broken: $BROKEN_COUNT | Stale: $STALE_COUNT | Tier: $TIER"
+
+          case "$TIER" in
+            Micro)
+              [ "$BROKEN_COUNT" -gt 0 ] && echo "::warning::broken anchors (Micro: warn only)"$'\n'"$BROKEN_LOG"
+              exit 0
+              ;;
+            Normal)
+              if [ "$BROKEN_COUNT" -gt 0 ]; then
+                echo "::error::broken anchors (Normal: fail)"$'\n'"$BROKEN_LOG"
+                exit 1
+              fi
+              [ "$STALE_COUNT" -gt 0 ] && echo "::warning::stale anchors (Normal: warn)"$'\n'"$STALE_LOG"
+              exit 0
+              ;;
+            Large)
+              if [ "$BROKEN_COUNT" -gt 0 ]; then
+                echo "::error::broken anchors (Large: fail)"$'\n'"$BROKEN_LOG"; exit 1
+              fi
+              if [ "$STALE_COUNT" -gt 0 ]; then
+                echo "::error::stale anchors (Large: fail)"$'\n'"$STALE_LOG"; exit 1
+              fi
+              exit 0
+              ;;
+          esac

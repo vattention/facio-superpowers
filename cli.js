@@ -88,7 +88,8 @@ const TEMPLATE_MANIFEST = [
   { src: 'scripts-generate-spec-html.mjs',     dest: 'scripts/generate-spec-html.mjs',      phase: 'sync', harness: true, executable: true },
   { src: 'github-workflows-catalog-sync.yml',  dest: '.github/workflows/catalog-sync.yml',  phase: 'sync', harness: true },
   { src: 'github-workflows-spec-sync.yml',     dest: '.github/workflows/spec-sync.yml',     phase: 'sync', harness: true },
-  { src: 'github-workflows-mitchell-loop.yml', dest: '.github/workflows/mitchell-loop.yml', phase: 'sync', harness: true },
+  { src: 'github-workflows-mitchell-loop.yml',         dest: '.github/workflows/mitchell-loop.yml',         phase: 'sync', harness: true },
+  { src: 'github-workflows-freshness-anchor-check.yml', dest: '.github/workflows/freshness-anchor-check.yml', phase: 'sync', harness: true },
   { src: 'harness-pipeline.md',                dest: '.harness/pipeline.md',                phase: 'sync', harness: true },
   { src: 'harness-gates.json',                 dest: '.harness/gates.json',                 phase: 'sync', harness: true },
 
@@ -518,7 +519,34 @@ Use \`/verification-before-completion\` skill after making architectural decisio
   log('\n📚 Documentation: https://github.com/vattention/facio-superpowers\n');
 }
 
-function sync(projectLevel = false) {
+// Detect uncommitted edits to sync-phase target files. Sync would overwrite
+// them silently — give the user a chance to stash/commit first.
+//
+// Skipped if cwd is not a git repo. `--force` flag bypasses.
+function findDirtyBaselineFiles(cwd, entries) {
+  try {
+    execSync('git rev-parse --git-dir', { cwd, stdio: 'pipe' });
+  } catch {
+    return [];
+  }
+  const dirty = [];
+  entries.forEach(entry => {
+    const target = path.join(cwd, entry.dest);
+    if (!fs.existsSync(target)) return;
+    try {
+      const out = execSync(
+        `git status --porcelain -- ${JSON.stringify(entry.dest)}`,
+        { cwd, encoding: 'utf8' }
+      );
+      if (out.trim()) dirty.push({ dest: entry.dest, status: out.trim() });
+    } catch {
+      // Path not tracked or git error — skip
+    }
+  });
+  return dirty;
+}
+
+function sync(projectLevel = false, force = false) {
   log('\n🔄 Syncing skills from facio-superpowers\n', 'blue');
 
   ensureCache();
@@ -588,6 +616,25 @@ function sync(projectLevel = false) {
   const templatesDir = getTemplatesDir();
   const harnessMode = fs.existsSync(path.join(cwd, '.harness'));
   const syncableEntries = selectEntries(harnessMode).filter(e => e.phase === 'sync');
+
+  // Fail-fast: if any sync-phase baseline file has uncommitted edits, refuse
+  // to clobber. User must stash/commit, or pass --force to override.
+  const dirtyBaselines = findDirtyBaselineFiles(cwd, syncableEntries);
+  if (dirtyBaselines.length > 0 && !force) {
+    log('\n❌ Cannot sync: team-baseline files have uncommitted edits', 'red');
+    dirtyBaselines.forEach(d => log(`   ${d.status}`, 'red'));
+    log('\nThese files are team-managed; sync would overwrite your edits.', 'reset');
+    log('Resolve by one of:', 'reset');
+    log('  git stash    # save edits then re-run sync', 'reset');
+    log('  git commit   # commit edits (rare — these are usually baseline)', 'reset');
+    log('  --force      # overwrite anyway (last resort)\n', 'reset');
+    process.exit(1);
+  }
+  if (dirtyBaselines.length > 0 && force) {
+    log('\n⚠️  --force: overwriting baseline files with uncommitted edits:', 'yellow');
+    dirtyBaselines.forEach(d => log(`   ${d.status}`, 'yellow'));
+    log('', 'reset');
+  }
 
   let overwritten = 0;
   let written = 0;
@@ -746,6 +793,7 @@ if (require.main === module) {
   const command = args[0];
   const projectLevel = args.includes('--project');
   const noHarness = args.includes('--no-harness');
+  const force = args.includes('--force');
 
   // --harness is deprecated in v2.0.0 (Harness is now the default).
   // Detect it only to emit a warning; behavior is unaffected.
@@ -771,7 +819,7 @@ if (require.main === module) {
       init(projectLevel, harnessMode);
       break;
     case 'sync':
-      sync(projectLevel);
+      sync(projectLevel, force);
       break;
     case 'harness-lint':
       harnessLint();
@@ -784,6 +832,7 @@ if (require.main === module) {
       log('  npx facio-superpowers init --project                Install skills to project + Harness scaffold (rare)');
       log('  npx facio-superpowers sync                          Sync global skills to latest');
       log('  npx facio-superpowers sync --project                Sync project skills (only if --project was used at init)');
+      log('  npx facio-superpowers sync --force                  Sync even if baseline files have uncommitted edits');
       log('  npx facio-superpowers harness-lint                  Verify Harness file layout in cwd');
       log('\nDeprecated:');
       log('  --harness                                            v1.x flag; now default. Drop the flag.\n');
