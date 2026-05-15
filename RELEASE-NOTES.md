@@ -1,3 +1,29 @@
+## v2.3.2 (2026-05-15)
+
+### Fixed — `rebuild-catalog.sh` template 补回 §C.4 schema validation
+
+**问题**：v2.3.0 `phase: 'sync'` 强制覆盖语义生效后，blueprint repo 的 `scripts/rebuild-catalog.sh` 被 template 覆盖，**M3 PR #7 加入的 schema validation 全部丢失**（regression）。
+
+根因：M3 当时只把 schema validate 加到 `facio-blueprint/scripts/rebuild-catalog.sh`（本应同步回写到 `facio-superpowers/templates/rebuild-catalog.sh` 但漏了）。template 本身从 M0 起就没含 schema validate。v2.3.0 让 sync 自动覆盖后暴露了这个 propagation gap。
+
+### 改动
+
+- `templates/rebuild-catalog.sh`：补回完整 schema validate（与 M3 blueprint 版一致）
+  - `validate_note_schema()`：7 REQUIRED + 2 OPTIONAL (§C.4) + K-id regex + maturity/type enum + id/type prefix 交叉校验 + last_referenced 格式校验
+  - `validate_all_notes()`：render 前对所有 decisions/guidelines/pitfalls 跑 schema 校验；任一失败 exit 1
+- 文件从 87 行扩到 167 行（schema validate 段）
+
+### 消费仓升级路径
+
+```bash
+# 已 init 项目跑 sync 即可恢复
+npx @vattention/facio-superpowers@latest sync
+```
+
+### Lesson sedimented
+
+M3 propagation gap 的根本教训：**单 repo 加的功能若是公司 baseline 性质，必须同步回写 facio-superpowers/templates/**，否则 v2.3.0 sync 会冲掉。下次 milestone 撰写 plan 时 self-review 必查"是否所有 template 类改动都回写到 facio-superpowers"。
+
 # Superpowers Release Notes
 
 ## v2.3.1 (2026-05-15)
