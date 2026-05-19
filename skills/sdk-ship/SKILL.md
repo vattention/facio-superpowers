@@ -10,13 +10,13 @@ description: SDK 发布/同步/上线相关操作都用此 skill — "发布sdk"
 ## 流程总览
 
 ```
-SDK: rebase → review → push → beta publish
+SDK: rebase → review → push branch → open SDK PR → merge → beta publish
 App: sdk:unlink → 升级版本 → rebase main → commit → push → open PR
 ```
 
 ---
 
-## Step 1 — SDK rebase & push
+## Step 1 — SDK rebase & PR
 
 ```bash
 # 在 sdk/ 目录下操作
@@ -33,7 +33,17 @@ git diff HEAD...origin/main -- <我改过的文件>               # 云端在同
 
 ```bash
 git rebase origin/main
-git push origin main
+
+# 不直接 push SDK main；SDK main 受保护，改动必须走 PR。
+git push origin HEAD
+gh pr create --base main --title "<SDK PR 标题>" --body "$(cat <<'EOF'
+## Summary
+- <SDK 改动摘要>
+
+## Test plan
+- [ ] <SDK 验证命令或手测项>
+EOF
+)"
 ```
 
 **冲突逻辑规则**
@@ -44,6 +54,8 @@ git push origin main
 ---
 
 ## Step 2 — 发布 beta 包
+
+默认只在 SDK PR 合入 main 后发布 beta。除非用户明确要求“从当前分支发布 beta 供验证”，不要在未合入的 SDK 分支上发布。
 
 **前提：确认 GitHub Packages 认证已配置**
 
@@ -61,6 +73,8 @@ npm config set //npm.pkg.github.com/:_authToken <GITHUB_TOKEN>
 
 ```bash
 cd /Users/boye/code/vattention/facio-next/sdk
+git switch main
+git pull --ff-only origin main
 bash scripts/publish-all.sh --beta --yes
 ```
 
@@ -152,7 +166,8 @@ EOF
 
 ## 快速检查清单
 
-- [ ] SDK `git push origin main` 完成
+- [ ] SDK 分支已推送并创建 PR
+- [ ] SDK PR 已合入 main
 - [ ] beta 包所有 6 个包验证上线
 - [ ] 应用层 `package.json` 版本已更新
 - [ ] `yarn install` 成功，无报错

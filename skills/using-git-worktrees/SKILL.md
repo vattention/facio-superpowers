@@ -117,7 +117,11 @@ Auto-detect and run appropriate setup:
 
 ```bash
 # Node.js
-if [ -f package.json ]; then npm install; fi
+if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.['worktree:sdk-install'] ? 0 : 1)" 2>/dev/null; then
+  yarn worktree:sdk-install
+elif [ -f package.json ]; then
+  npm install
+fi
 
 # Rust
 if [ -f Cargo.toml ]; then cargo build; fi
@@ -168,6 +172,7 @@ Ready to implement <feature-name>
 | Permission error on create | Sandbox fallback, work in place |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
+| Facio Next with `worktree:sdk-install` | Run `yarn worktree:sdk-install`; it reinstalls isolated `node_modules` and verifies local SDK portal paths |
 
 ## Common Mistakes
 
@@ -196,6 +201,27 @@ Ready to implement <feature-name>
 - **Problem:** Can't distinguish new bugs from pre-existing issues
 - **Fix:** Report failures, get explicit permission to proceed
 
+### Hardcoding setup commands
+
+- **Problem:** Breaks on projects using different tools
+- **Fix:** Auto-detect from project files (package.json, etc.)
+
+## Example Workflow
+
+```
+You: I'm using the using-git-worktrees skill to set up an isolated workspace.
+
+[Check .worktrees/ - exists]
+[Verify ignored - git check-ignore confirms .worktrees/ is ignored]
+[Create worktree: git worktree add .worktrees/auth -b feature/auth]
+[Run yarn worktree:sdk-install when available, otherwise run npm install]
+[Run npm test - 47 passing]
+
+Worktree ready at /Users/jesse/myproject/.worktrees/auth
+Tests passing (47 tests, 0 failures)
+Ready to implement auth feature
+```
+
 ## Red Flags
 
 **Never:**
@@ -204,6 +230,7 @@ Ready to implement <feature-name>
 - Skip Step 1a by jumping straight to Step 1b's git commands
 - Create worktree without verifying it's ignored (project-local)
 - Skip baseline test verification
+- Skip `worktree:sdk-install` when the project provides it
 - Proceed with failing tests without asking
 
 **Always:**

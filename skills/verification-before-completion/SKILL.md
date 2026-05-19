@@ -137,3 +137,233 @@ From 24 failure memories:
 Run the command. Read the output. THEN claim the result.
 
 This is non-negotiable.
+
+## Documentation Check
+
+After verification passes, check if documentation needs update:
+
+**PROJECT DOCUMENTATION RULES OVERRIDE THIS SKILL.**
+
+Before proposing or writing documentation, read the project's documentation rules:
+
+```bash
+AGENTS.md
+docs/README.md
+docs/rules/documentation-constitution.md
+```
+
+If the project forbids or deprecates a documentation location, do not create or update that location. In particular, do not create `docs/superpowers/`, `docs/adr/`, `docs/modules/`, or `docs/DOCUMENTATION-MAP.md` unless the project explicitly allows them.
+
+**MANDATORY CHECKLIST - DO NOT SKIP ANY STEP:**
+
+- [ ] Step 1: Analyze code changes (git diff)
+- [ ] Step 2: Identify affected modules
+- [ ] Step 3: Check if a long-lived spec/rule update is needed
+- [ ] Step 4: **Check project-approved documentation** (CRITICAL - often skipped!)
+- [ ] Step 5: Check maintenance docs
+- [ ] Step 6: Offer to auto-generate/update
+- [ ] Step 7: If no updates needed, confirm
+
+**1. Analyze code changes:**
+```bash
+git diff --cached --stat
+git diff --cached
+```
+
+**2. Identify affected modules:**
+
+**CRITICAL: Use your judgment to identify modules/systems that need documentation.**
+
+Analyze the changed files and determine which modules/systems are affected:
+
+**What qualifies as a module/system:**
+- Has independent functional boundaries (e.g., authentication, user management, payment processing)
+- Contains its own components, services, or APIs
+- Represents a cohesive subsystem worth documenting separately
+- NOT utility functions, type definitions, or configuration files
+
+**How to identify:**
+1. Get changed files: `git diff --cached --name-only`
+2. Examine the directory structure and file contents
+3. Use your understanding of the codebase to determine:
+   - Is this part of a larger functional module?
+   - Does it have its own domain logic and boundaries?
+   - Would it benefit from dedicated documentation?
+
+**Examples of modules/systems:**
+- `src/modules/account/` or `src/auth/` → Authentication system
+- `src/api/` or `backend/api/` → API layer
+- `src/renderer/` in Electron app → Renderer process
+- `myproject/payment/` → Payment processing module
+- `services/notification/` → Notification service
+
+**NOT modules/systems:**
+- `src/utils/` → Utility functions (shared helpers)
+- `src/types/` → Type definitions (no business logic)
+- `src/config/` → Configuration files
+- `tests/` → Test files (unless testing infrastructure itself)
+
+**Check the project's approved documentation structure:**
+- Read `docs/README.md` and `docs/rules/documentation-constitution.md` if present.
+- Identify the approved location for current subsystem documentation.
+- Treat legacy directories as historical unless the project explicitly marks them current.
+
+**Use your judgment:** Don't rely on rigid rules. Understand the code's purpose and structure to determine what needs documentation.
+
+**3. Check if a long-lived spec/rule update is needed:**
+
+Ask these questions:
+- Did we introduce a new library/framework?
+- Did we change architecture patterns?
+- Did we make a technical selection (A vs B)?
+- Did we make important trade-off decisions?
+
+If YES to any → update the project-approved long-lived documentation location. Prefer `docs/specs/` for current truth and `docs/rules/` for mandatory rules, unless the project documentation constitution says otherwise.
+
+**4. Check project-approved documentation:**
+
+**CRITICAL: For EACH identified subsystem, you MUST perform these checks against the project's approved documentation structure:**
+
+For each affected subsystem, check:
+
+a) **Approved documentation exists?**
+   - Check `docs/README.md` and the project's documentation constitution to find the right location.
+   - If NO → offer to create documentation in the approved location.
+   - If YES → Proceed to check if update needed
+
+b) **Documentation needs update?**
+   - New components added → **MUST** update "核心组件" section
+   - New API/functions exported → **MUST** update "API" section
+   - Architecture changed → **MUST** update the approved architecture/spec document
+   - New examples needed → Add them only if the project documentation rules allow examples
+
+c) **Component list sync:**
+   - **MUST** list relevant component files when the affected subsystem has components
+   - **MUST** compare with the approved documentation, if such a component table exists
+   - **MUST** report missing or outdated entries
+
+d) **API list sync:**
+   - **MUST** check module's main export (index.ts/index.py/__init__.py)
+   - **MUST** compare with the approved documentation, if such an API section exists
+   - **MUST** report missing or outdated entries
+
+**Example output:**
+```
+🔍 Checking module documentation...
+
+Module: account
+  ✓ docs/specs/account.md exists
+  ⚠️  Found 2 new components not in documentation:
+      - LoginForm (src/modules/account/components/LoginForm.tsx)
+      - RegisterForm (src/modules/account/components/RegisterForm.tsx)
+  ⚠️  Found 1 new API not in documentation:
+      - useAuth (src/modules/account/index.ts)
+
+Module: settings
+  ✗ Approved documentation does not exist
+  → Will propose creating docs/specs/settings.md
+```
+
+**If you skip this check, you are violating the skill requirements.**
+
+**5. Check maintenance docs:**
+
+| Change Type | Document to Update |
+|-------------|-------------------|
+| New library added | Project-approved spec or rule |
+| Architecture changed | Project-approved architecture/spec document |
+| New common pattern | Project-approved spec, rule, or reference |
+| Team standards changed | Project-approved rule file or root `AGENTS.md` |
+
+**6. Offer to auto-generate:**
+
+If documentation needed:
+```
+📋 Documentation updates needed:
+
+- [ ] Spec: New library introduced (React Query)
+      Target: docs/specs/<approved-name>.md
+
+- [ ] Update: docs/specs/account.md
+      - Add ComponentA to "核心组件" table
+      - Add useAccountData to "API" section
+
+- [ ] Update: AGENTS.md or docs/rules/* only if this is a mandatory rule
+
+Should I generate/update these documents? (yes/no)
+```
+
+If user confirms:
+- Use templates to generate new documents
+- Update existing documents with new information
+- Fill in information from code changes
+- Save to appropriate locations
+- **Auto-update document indexes according to project rules:**
+  - Update `docs/README.md` when adding or moving a current documentation entry.
+  - Update the relevant directory `README.md` if the project uses one.
+  - Do not create legacy indexes such as `docs/DOCUMENTATION-MAP.md` unless explicitly allowed.
+- **Auto-update approved subsystem documentation:**
+  - Scan relevant component files and exports.
+  - Update the approved spec/rule/reference document.
+  - Update freshness metadata only if the project uses it.
+- Notify user to review and adjust
+
+**Detailed update procedures:**
+
+a) **Creating new subsystem documentation:**
+   ```bash
+   # 1. Read project documentation rules
+   sed -n '1,220p' docs/rules/documentation-constitution.md
+
+   # 2. Create the approved target file
+   # Example when specs/ is the approved current-truth location:
+   $EDITOR docs/specs/{subsystem}.md
+
+   # 3. Fill in module information:
+   - Module name
+   - Description (from code analysis)
+   - Current components (scan src/modules/{module}/components/)
+   - Current exports (scan src/modules/{module}/index.ts)
+   - Related ADRs (search for module name in ADRs)
+
+   # 4. Update docs/README.md or directory README if required by project rules
+   ```
+
+b) **Updating existing subsystem documentation:**
+   ```bash
+   # 1. Scan for new components
+   find src/modules/{module}/components -name "*.tsx" -o -name "*.ts"
+
+   # 2. Compare with the approved documentation
+
+   # 3. Add missing components:
+   | ComponentName | {职责} | src/modules/{module}/components/ComponentName.tsx | ✅ |
+
+   # 4. Scan for new exports
+   grep "export" src/modules/{module}/index.ts
+
+   # 5. Compare with the approved API section, if one exists
+
+   # 6. Add missing exports:
+   | functionName | {描述} | {参数} | {返回值} |
+
+   # 7. Update timestamp
+   Replace "最后更新：{OLD_DATE}" with "最后更新：{TODAY}"
+   ```
+
+c) **Updating documentation indexes:**
+   ```bash
+   # Follow the project documentation constitution.
+   # For repositories using docs/README.md as the map, update docs/README.md.
+   ```
+
+**7. If no documentation needed:**
+```
+✅ All verifications passed
+📋 No documentation updates needed
+Ready to commit.
+```
+
+## Remember
+
+Documentation is part of completion. Verification without documentation check is incomplete.

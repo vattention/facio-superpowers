@@ -105,22 +105,39 @@ mcp__facio-flow__manage_artifact({
 
 Use file tools to find local documentation.
 
-### 3.1 Check Standard Locations
+### 3.1 Check Project Documentation Rules First
+
+Before searching docs, check whether the project defines documentation rules:
 
 ```bash
-# ADRs - architectural decisions
-docs/adr/
-
-# Plans - design documents
-docs/plans/
-
-# Specs - local specifications
-docs/specs/
+AGENTS.md
+docs/README.md
+docs/rules/documentation-constitution.md
 ```
 
-### 3.2 Search Strategy
+If these files define trusted locations or deprecated locations, follow them. Project documentation rules override the legacy search locations below.
 
-1. **Check indexes first** - `docs/adr/README.md` for quick scan
+### 3.2 Check Standard Locations
+
+```bash
+# Current source-of-truth specifications
+docs/specs/
+
+# Active implementation plans
+docs/plans/
+
+# Undecided designs and proposals
+docs/proposals/
+
+# Mandatory rules and constitutions
+docs/rules/
+```
+
+Treat legacy locations such as `docs/adr/`, `docs/modules/`, and `docs/superpowers/` as historical unless the project explicitly marks them current.
+
+### 3.3 Search Strategy
+
+1. **Check indexes first** - `docs/README.md`, then relevant directory README files
 2. **Grep for keywords** - find mentions across docs
 3. **Limit to 3 files** - avoid context overflow
 

@@ -1,0 +1,8 @@
+interface:
+  display_name: "Electron Perf Diagnostics"
+  short_description: "Diagnose Electron memory and CPU issues"
+  brand_color: "#2563EB"
+  default_prompt: "Use $electron-perf-diagnostics to investigate this Electron memory leak or CPU spike and summarize the evidence."
+
+policy:
+  allow_implicit_invocation: true
