@@ -97,6 +97,7 @@ const TEMPLATE_MANIFEST = [
   { src: 'AGENTS-PROJECT.md',                   dest: 'AGENTS.md',                          phase: 'init-only', harness: true, substitute: true },
   { src: 'role-bindings-project.yaml',          dest: '.harness/role-bindings.yaml',        phase: 'init-only', harness: true },
   { src: 'harness-readme.md',                   dest: '.harness/README.md',                 phase: 'init-only', harness: true },
+  { src: 'harness-config.env',                  dest: '.harness/config.env',                phase: 'init-only', harness: true },
   { src: 'codeowners.template',                 dest: '.github/CODEOWNERS.template',        phase: 'init-only', harness: true, substitute: true },
   { src: 'docs-reference-readme.md',            dest: 'docs/reference/README.md',           phase: 'init-only', harness: true },
   { src: 'docs-reference-architecture-stub.md', dest: 'docs/reference/architecture.md',     phase: 'init-only', harness: true, substitute: true },

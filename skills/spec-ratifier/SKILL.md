@@ -31,7 +31,7 @@ On entry, you MUST verify ALL of:
 
 If ANY is missing, refuse to proceed:
   - missing self-review.md / stale sha → "Re-run spec-author Step 15"
-  - missing webhook → "Configure FACIO_LARK_WEBHOOK_URL (Task 1 Step 4)"
+  - missing webhook → ".harness/README.md → Lark webhook 配置"（个人 export 或团队 .harness/config.env）
 
 You MUST NOT modify spec.md body — only frontmatter `status` field, via 
 `scripts/spec-status.mjs` (the superpowers util installed by `init --harness`).
@@ -78,9 +78,28 @@ CURRENT_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')
 [ "$REVIEW_SHA" = "$CURRENT_SHA" ] || \
   { echo "✗ self-review stale: review_sha=$REVIEW_SHA, current=$CURRENT_SHA — re-run Step 15"; exit 1; }
 
+# Auto-source committed harness env defaults if present.
+# Private repos may commit `.harness/config.env` with shared FACIO_LARK_WEBHOOK_URL;
+# public repos leave it absent and rely on per-developer shell exports.
+[ -f .harness/config.env ] && set -a && . .harness/config.env && set +a
+
 # Verify Lark webhook configured (M1 §11.2 #5)
-[ -n "$FACIO_LARK_WEBHOOK_URL" ] || \
-  { echo "✗ FACIO_LARK_WEBHOOK_URL not set (Task 1 Step 4 pre-req)"; exit 1; }
+if [ -z "$FACIO_LARK_WEBHOOK_URL" ]; then
+  cat <<'EOF'
+✗ FACIO_LARK_WEBHOOK_URL not set
+
+Configure via one of:
+  • Personal:  add `export FACIO_LARK_WEBHOOK_URL=<url>` to ~/.zshrc
+  • Team:      create `.harness/config.env` with FACIO_LARK_WEBHOOK_URL=<url>
+               (skill auto-sources; commit only in PRIVATE repos)
+
+Webhook URL = Lark 群机器人 incoming webhook
+(群设置 → 群机器人 → 添加自定义机器人).
+
+Full runbook: .harness/README.md → "Lark webhook 配置"
+EOF
+  exit 1
+fi
 
 echo "✓ pre-check passed"
 ```
@@ -261,7 +280,7 @@ The tool returns text containing a `lark_status:` line. spec-ratifier MUST parse
 | `isError: true, spec not found` | spec_path 参数错（绝对 vs 相对）| 修参数重试 |
 | `isError: true, rejected ... requires reason` | event=rejected 但无 note / rejected_reason | 补 note 重试 |
 | Response contains `lark_status: failed` | webhook URL 失效 / Lark 服务暂时下线 | Retry 3 次（30s 间隔）；最终失败 escalate；§11.2 #5 未满足 |
-| Response contains `lark_status: skipped` | `FACIO_LARK_WEBHOOK_URL` 未设 (pre-check 应阻拦) | halt；回 Task 1 Step 4 修复 |
+| Response contains `lark_status: skipped` | `FACIO_LARK_WEBHOOK_URL` 未设 (pre-check 应阻拦) | halt；按 `.harness/README.md` → Lark webhook 配置 修复 |
 | MCP 离线 / tool 不可达 | Flow MCP server down | 完整 halt：本地 commit 已发生但 audit / broadcast 未触发 → **不**视为 ratification 完成；必须等 MCP 恢复重跑 Step 7 |
 
 ## Step 8 · Exit Hint (codex 3rd-round Minor #3 + 4th-round F2: audit-backed proof)
