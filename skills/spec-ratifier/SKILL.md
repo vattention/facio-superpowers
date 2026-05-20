@@ -75,15 +75,14 @@ You MUST create a TodoWrite task for each step:
 
 1. **Step 0** — Detect mode: gh pr view → resume if PR open, else active
 
-**Active mode (no PR yet)**
+**Active mode (no PR yet)** — checklist mirrors the H2 sections
 
-2. **Step 1A** — Pre-check active: status=draft + self-review valid + webhook configured + gh installed + branch != main
-3. **Step 2A** — Read tier from §6, derive owner set
-4. **Step 3A** — git push -u origin <branch>
-5. **Step 4A** — gh pr create --draft + label="spec-review" + PR body template
-6. **Step 5A** — Build review_requested lark_card payload
-7. **Step 6A** — notify_spec_event(review_requested, pr_url=..., lark_card=...)
-8. **Step 7A** — Exit with "PR opened, come back after 3 approvals"
+2. **Step 1** — Common pre-check (status=draft + self-review valid + webhook + gh + branch != main)
+3. **Step 2** — Read tier from §6, derive owner set
+4. **Step 3A** — git push -u origin <branch> + gh pr create --draft + label="spec-review" (combined; idempotent)
+5. **Step 4A** — Build review_requested lark_card payload (interactive card v2.0)
+6. **Step 5A** — notify_spec_event(review_requested, pr_url=..., lark_card=...) — broadcast defaults to true
+7. **Step 6A** — Exit with "PR opened, come back after 3 approvals"
 
 **Resume mode (PR exists)**
 
