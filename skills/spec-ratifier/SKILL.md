@@ -86,7 +86,7 @@ You MUST create a TodoWrite task for each step:
 
 **Resume mode (PR exists)**
 
-2. **Step 1R** — Pre-check resume: PR open + self-review still valid (sha)
+2. **Step 1R** — Resume pre-check: capture PR URL / number / HEAD sha (self-review sha was validated in Step 1 common pre-check)
 3. **Step 2R** — gh pr view --json reviews → confirm 3 owner approvals collected
 4. **Step 3R** — Validate review commit_id maps to current spec.md sha
 5. **Step 4R** — Write approvals.md from API data (role / approver / spec_sha / timestamp / github_review_id)
@@ -102,6 +102,7 @@ You MUST create a TodoWrite task for each step:
 
 ```bash
 # Run from product repo root
+# Replace <slug> with the actual spec filename (e.g. 2026-05-20-foo-bar.md)
 SPEC=docs/superpowers/specs/<slug>.md
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 [ "$BRANCH" = "main" ] && { echo "✗ refusing to operate on main"; exit 1; }
@@ -171,6 +172,20 @@ All-`✓` is the only valid entry condition for the chosen mode below.
 | Normal | 3 owner 全 approve（PM + designer + engineer，frontmatter `owners.{pm,designer,engineer}`）|
 | Large | 3 owner + 跨产品契约 owner（若 §5 涉及 `blueprint/contracts/`，则从 `blueprint/contracts/CODEOWNERS` 取） |
 
+```bash
+# Extract tier from spec frontmatter
+TIER=$(grep -E '^tier:' "$SPEC" | head -1 | awk '{print $2}')
+[ -n "$TIER" ] || { echo "✗ tier not found in spec frontmatter"; exit 1; }
+
+# Extract owner open_ids (used by both PR body and Lark card)
+# YAML may quote values like  pm: "@user"  — strip both quotes and leading @
+PM_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  pm:' | sed -E 's/.*pm:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+DESIGNER_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  designer:' | sed -E 's/.*designer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+ENG_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  engineer:' | sed -E 's/.*engineer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+
+echo "→ tier: $TIER, owners: pm=@$PM_OPEN_ID designer=@$DESIGNER_OPEN_ID engineer=@$ENG_OPEN_ID"
+```
+
 ## Step 3A · Active Mode: Push branch + Open Draft PR
 
 ```bash
@@ -178,6 +193,9 @@ All-`✓` is the only valid entry condition for the chosen mode below.
 git push -u origin "$BRANCH"
 
 # 幂等：复用现有 PR；否则 create draft
+# Ensure spec-review label exists (idempotent; ignores "already exists" error)
+gh label create spec-review --color 0E8A16 --description "Spec PR awaiting 3-owner review" 2>/dev/null || true
+
 PR_URL=$(gh pr view --json url -q .url 2>/dev/null) || PR_URL=""
 if [ -z "$PR_URL" ]; then
   # Compose PR body (referenced from §3 of design spec)
@@ -193,9 +211,9 @@ This PR carries spec.md + spec.html for review. Implementation commits will be a
 
 ### Review checklist
 
-- [ ] PM (@pm-user): 产品视角符合期望
-- [ ] Designer (@designer-user): 设计视角符合期望
-- [ ] Engineer (@eng-user): 研发视角可实施
+- [ ] PM ($PM_OPEN_ID): 产品视角符合期望
+- [ ] Designer ($DESIGNER_OPEN_ID): 设计视角符合期望
+- [ ] Engineer ($ENG_OPEN_ID): 研发视角可实施
 
 After 3 approvals, dev will run spec-ratifier resume to finalize. **Do not merge this PR until implementation commits are also pushed.**
 EOF
@@ -203,8 +221,7 @@ EOF
   PR_URL=$(gh pr create --draft \
     --title "spec: $CHANGE_ID" \
     --body-file "$PR_BODY_FILE" \
-    --label "spec-review" \
-    --json url -q .url)
+    --label "spec-review")
   rm "$PR_BODY_FILE"
 fi
 echo "✓ PR: $PR_URL"
@@ -217,10 +234,7 @@ echo "✓ PR: $PR_URL"
 ```bash
 DEADLINE=$(date -u -d "+2 weekdays" +"%Y-%m-%d" 2>/dev/null || date -v+2d +"%Y-%m-%d")
 
-# Owner open_ids 从 frontmatter or role-bindings 查
-PM_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep 'pm:' | sed 's/.*pm:\s*//; s/^@//')
-DESIGNER_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep 'designer:' | sed 's/.*designer:\s*//; s/^@//')
-ENG_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep 'engineer:' | sed 's/.*engineer:\s*//; s/^@//')
+# Owner open_ids already extracted in Step 2 (PM_OPEN_ID / DESIGNER_OPEN_ID / ENG_OPEN_ID)
 
 # Card JSON (本 skill 由 AI 构造完整 JSON 字串传给 notify_spec_event)
 LARK_CARD=$(cat <<EOF
@@ -283,7 +297,7 @@ mcp__facio-flow__notify_spec_event({
 })
 ```
 
-**Exit 条件 of Step 5A：** 返回值含 `lark_status: sent`。若 `failed` 重试最多 3 次（30s 间隔）；最终失败 escalate user halt skill。
+**Exit 条件 of Step 5A：** 返回值含 `lark_status: sent`。若 `failed`，可重新调用一次 `notify_spec_event`（idempotency_key 保证 audit 不重复，但 broadcast_attempt 会累加）；若多次 failed → escalate user，halt skill。
 
 ## Step 6A · Exit Active Mode
 
@@ -348,15 +362,20 @@ CURRENT_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')
 # 校验每个 approval 的 commit_id 对应的 spec.md sha == CURRENT_SHA
 STALE_COUNT=0
 while IFS=$'\t' read -r LOGIN COMMIT_OID SUBMITTED_AT; do
-  # gh API 拉 commit 上 spec.md 的内容
-  CONTENT_AT_COMMIT=$(gh api "repos/{owner}/{repo}/contents/$SPEC?ref=$COMMIT_OID" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)
-  if [ -n "$CONTENT_AT_COMMIT" ]; then
-    SHA_AT_COMMIT=$(echo -n "$CONTENT_AT_COMMIT" | shasum -a 256 | awk '{print $1}')
+  # gh API 拉 commit 上 spec.md 的内容（写入 temp file 避免 bash command substitution 吞掉尾换行）
+  TMP_SPEC=$(mktemp)
+  gh api "repos/{owner}/{repo}/contents/$SPEC?ref=$COMMIT_OID" --jq '.content' 2>/dev/null | base64 -d > "$TMP_SPEC" 2>/dev/null
+  if [ -s "$TMP_SPEC" ]; then
+    SHA_AT_COMMIT=$(shasum -a 256 "$TMP_SPEC" | awk '{print $1}')
     if [ "$SHA_AT_COMMIT" != "$CURRENT_SHA" ]; then
       echo "⚠ approval by $LOGIN was on stale commit ($COMMIT_OID); spec changed since"
       STALE_COUNT=$((STALE_COUNT + 1))
     fi
+  else
+    echo "⚠ could not fetch spec at commit $COMMIT_OID (spec may have been moved/renamed); treating approval by $LOGIN as stale"
+    STALE_COUNT=$((STALE_COUNT + 1))
   fi
+  rm -f "$TMP_SPEC"
 done < /tmp/approvals.tsv
 
 if [ "$STALE_COUNT" -gt 0 ]; then
@@ -391,7 +410,11 @@ jq -r '.reviews
   | .[] | [.author.login, .id, .submittedAt] | @tsv
 ' /tmp/reviews.json | while IFS=$'\t' read -r LOGIN REVIEW_ID SUBMITTED_AT; do
   # role 推断：根据 frontmatter owners.{pm,designer,engineer} 匹配 login
-  ROLE=$(awk -v login="$LOGIN" '/^owners:/{f=1; next} f && /^[a-z]/{f=0} f && $2 ~ "@"login {gsub(":","",$1); print $1; exit}' "$SPEC")
+  ROLE=$(awk -v login="$LOGIN" '
+    /^owners:/{f=1; next}
+    f && (/^---$/ || /^[^[:space:]]/) {f=0}
+    f && $0 ~ ("@" login "\"?[[:space:]]*$") {gsub(":","",$1); print $1; exit}
+  ' "$SPEC")
   if [ -z "$ROLE" ]; then ROLE="unknown"; fi
   echo "| $ROLE | @$LOGIN | $CURRENT_SHA | $SUBMITTED_AT | $REVIEW_ID |" >> "$APPROVALS"
 done
@@ -477,7 +500,7 @@ mcp__facio-flow__notify_spec_event({
 })
 ```
 
-**Expected response**: `lark_status: skipped`（broadcast=false 的预期值），不算 failure。audit.jsonl 增加一行 lifecycle_event 但无 broadcast_attempt 行。
+**Expected response**: `lark_status: skipped`（broadcast=false 的预期值），不算 failure。audit.jsonl 增加一行 lifecycle_event + 一行 broadcast_attempt（lark_status: skipped；webhook 实际未触发）。
 
 **Failure modes**:
 
@@ -496,7 +519,7 @@ echo "✓ PR remains open: $PR_URL"
 echo ""
 echo "Audit (~/.facio-flow/audit.jsonl):"
 echo "  - 1 review_requested lifecycle_event (from active mode)"
-echo "  - 1 ratified lifecycle_event (no broadcast_attempt row — broadcast=false by design §5.2)"
+echo "  - 1 ratified lifecycle_event + 1 broadcast_attempt (lark_status: skipped; webhook not invoked per §5.2)"
 echo ""
 echo "Next:"
 echo "  - Flow Skill HARD-GATE detects status=ratified, chains to writing-plans"
