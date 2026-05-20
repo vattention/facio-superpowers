@@ -63,14 +63,33 @@ Resume mode sequence (after collecting 3 PR approvals):
 
 You MUST create a TodoWrite task for each step:
 
-1. **Step 1** — Pre-check: status=draft + self-review artifact valid (sha-bound) + webhook configured + mmdc available
-2. **Step 2** — Read tier from §6, derive owner set
-3. **Step 3** — Dispatch review: call `notify_spec_event(event="review_requested")` → REAL Lark broadcast with owners/link/deadline
-4. **Step 4** — Collect 3 owner approvals → write `.harness/changes/<change_id>/approvals.md` (full 64-char sha-bound)
-5. **Step 5** — Transition status draft → ratified (spec-status.mjs)
-6. **Step 6** — Regenerate spec.html via mmdc (single commit: spec.md + spec.html + approvals.md)
-7. **Step 7** — Call `notify_spec_event(event="ratified")` → REAL Lark broadcast; parse `lark_status`; retry-3 on failed
-8. **Step 8** — Exit hint: chain to writing-plans (via Flow Skill HARD-GATE)
+**Mode detection (do first, decides which branch below)**
+
+1. **Step 0** — Detect mode: gh pr view → resume if PR open, else active
+
+**Active mode (no PR yet)**
+
+2. **Step 1A** — Pre-check active: status=draft + self-review valid + webhook configured + gh installed + branch != main
+3. **Step 2A** — Read tier from §6, derive owner set
+4. **Step 3A** — git push -u origin <branch>
+5. **Step 4A** — gh pr create --draft + label="spec-review" + PR body template
+6. **Step 5A** — Build review_requested lark_card payload
+7. **Step 6A** — notify_spec_event(review_requested, pr_url=..., lark_card=...)
+8. **Step 7A** — Exit with "PR opened, come back after 3 approvals"
+
+**Resume mode (PR exists)**
+
+2. **Step 1R** — Pre-check resume: PR open + self-review still valid (sha)
+3. **Step 2R** — gh pr view --json reviews → confirm 3 owner approvals collected
+4. **Step 3R** — Validate review commit_id maps to current spec.md sha
+5. **Step 4R** — Write approvals.md from API data (role / approver / spec_sha / timestamp / github_review_id)
+6. **Step 5R** — spec-status.mjs write spec.md ratified
+7. **Step 6R** — generate-spec-html.mjs spec.md
+8. **Step 7R** — Single commit (spec.md + spec.html + approvals.md) + git push
+9. **Step 8R** — notify_spec_event(ratified, broadcast=false) — audit only
+10. **Step 9R** — Exit hint: Flow Skill HARD-GATE chains to writing-plans
+
+**Important: Resume mode does NOT merge the PR.** Implementation commits will be appended to the same PR by writing-plans / executing-plans; the whole PR (spec + impl) merges as one unit later.
 
 ## Step 1 · Pre-check (machine-verifiable, codex review B)
 
