@@ -22,26 +22,41 @@ spec-ratifier 把 spec-author 起草完毕（status=draft，self-review all-PASS
 - 用户想"先讨论一下" → 回 spec-author Step 1 wrap brainstorming
 
 <HARD-GATE>
-On entry, you MUST verify ALL of:
+spec-ratifier has two modes — auto-detect on entry:
+
+**Active mode** — pre-PR state. Requires:
   1. spec.md frontmatter status: draft
-  2. .harness/changes/<change_id>/self-review.md exists, has `result: pass`,
-     and its `spec_sha` field equals sha256(spec.md) — proves the self-review
-     is still valid for the current spec content (codex review B)
-  3. FACIO_LARK_WEBHOOK_URL is set (M1 §11.2 #5 acceptance pre-req)
+  2. .harness/changes/<change_id>/self-review.md exists with `result: pass`
+     and spec_sha matches sha256(spec.md)
+  3. FACIO_LARK_WEBHOOK_URL set (via .harness/config.env or shell)
+  4. `gh --version` available AND `gh auth status` passes (NEW in v2.4.0)
+  5. current branch != main
+  6. NO open PR for this branch (else use resume mode)
 
-If ANY is missing, refuse to proceed:
+**Resume mode** — post-dispatch state. Requires:
+  1. spec.md frontmatter status: draft (still — flip happens in this mode)
+  2. open PR for current branch (gh pr view returns URL)
+  3. self-review.md still valid (sha unchanged)
+  4. gh CLI auth OK
+
+If neither mode applies, refuse to proceed:
   - missing self-review.md / stale sha → "Re-run spec-author Step 15"
-  - missing webhook → ".harness/README.md → Lark webhook 配置"（个人 export 或团队 .harness/config.env）
+  - missing webhook → ".harness/README.md → Lark webhook 配置"
+  - missing gh CLI → "Install gh: macOS `brew install gh`, Linux/Windows see docs; then `gh auth login`"
+  - on main → "Refusing to operate on main; create a feature branch first"
 
-You MUST NOT modify spec.md body — only frontmatter `status` field, via 
-`scripts/spec-status.mjs` (the superpowers util installed by `init --harness`).
-You MUST sequence: 
-  1. transition status via spec-status.mjs
-  2. regenerate spec.html
-  3. commit (spec.md + spec.html + approvals.md together)
-  4. call notify_spec_event AFTER commit
-This ordering is required by notify_spec_event's strict state check — calling
-before the transition is committed will fail with isError (by design).
+You MUST NOT modify spec.md body — only frontmatter `status` field, via
+`scripts/spec-status.mjs`.
+
+Resume mode sequence (after collecting 3 PR approvals):
+  1. write approvals.md from PR Reviews API data
+  2. spec-status.mjs draft → ratified
+  3. regen spec.html
+  4. single commit (spec.md + spec.html + approvals.md) + push to PR branch
+  5. notify_spec_event(ratified, broadcast=false) AFTER commit
+     (broadcast=false because ratified is internal milestone per design §5.2)
+  6. Do NOT merge the PR — implementation commits will be appended later;
+     PR merges once spec + impl + tests are all ready
 </HARD-GATE>
 
 ## Checklist
