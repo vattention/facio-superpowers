@@ -454,59 +454,49 @@ git push  # 推到 PR 分支，不 merge
 
 若仓库开启 "Require re-review after new commits"，ratify commit 推上去会 dismiss 之前的 approval — 接受为治理代价（详见 design spec §4.4 / §9）。
 
-## Step 8 · Exit Hint (codex 3rd-round Minor #3 + 4th-round F2: audit-backed proof)
+## Step 8R · Notify Ratified Event (audit only, no broadcast)
 
-Exit gate — verify the **audit trail itself**, not just chat-level response, because audit is the durable §11.2 #5 acceptance evidence:
+```javascript
+// AFTER Step 7R commit. broadcast=false 是 design §5.2 的有意决策：
+// ratified 是 internal milestone，无 actionable audience；
+// audit.jsonl 仍写一行 lifecycle_event 保留状态机完整性。
+mcp__facio-flow__notify_spec_event({
+  spec_path: "<relative-path>",
+  event: "ratified",
+  actor: "spec-ratifier",
+  pr_url: "<PR_URL>",
+  broadcast: false,  // 显式覆盖 DEFAULT_BROADCAST（虽然 ratified 的默认就是 false，显式更清晰）
+  note: "approvers per .harness/changes/<id>/approvals.md; PR remains open"
+})
+```
+
+**Expected response**: `lark_status: skipped`（broadcast=false 的预期值），不算 failure。audit.jsonl 增加一行 lifecycle_event 但无 broadcast_attempt 行。
+
+**Failure modes**:
+
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| `isError: true, status mismatch` | Step 5R-7R 未先 commit | 回 Step 7R 检查 |
+| MCP 不可达 | Flow MCP server down | 完整 halt；待 MCP 恢复重跑 Step 8R |
+
+## Step 9R · Exit Hint — Chain to writing-plans
 
 ```bash
-AUDIT=~/.facio-flow/audit.jsonl
-CHANGE_ID=$(grep -E '^change_id:' "$SPEC" | awk '{print $2}')
-SPEC_SHA_AT_DISPATCH=<recorded from Step 3 spec_sha; spec was draft>
-SPEC_SHA_AT_RATIFY=<recorded from Step 6 spec_sha; spec is ratified>
-
-# For each of the two events, audit must have:
-#   (a) one type=lifecycle_event row (review_requested doesn't transition status,
-#       but it still records a lifecycle_event row capturing spec_sha at dispatch)
-#   (b) at least one type=broadcast_attempt row with lark_status=sent
-for EVENT_SHA_PAIR in "review_requested:$SPEC_SHA_AT_DISPATCH" "ratified:$SPEC_SHA_AT_RATIFY"; do
-  EVENT="${EVENT_SHA_PAIR%%:*}"
-  SHA="${EVENT_SHA_PAIR##*:}"
-  KEY="${CHANGE_ID}:${EVENT}:${SHA}"
-
-  # lifecycle_event row
-  TRANS=$(awk -v k="$KEY" '$0 ~ "\"type\":\"lifecycle_event\"" && $0 ~ k {c++} END{print c+0}' "$AUDIT")
-  [ "$TRANS" = "1" ] || { echo "✗ event=$EVENT: expected 1 lifecycle_event row, got $TRANS"; exit 1; }
-
-  # at least one broadcast_attempt with lark_status=sent
-  SENT=$(awk -v k="$KEY" '$0 ~ "\"type\":\"broadcast_attempt\"" && $0 ~ k && $0 ~ "\"lark_status\":\"sent\"" {c++} END{print c+0}' "$AUDIT")
-  [ "$SENT" -ge 1 ] || { echo "✗ event=$EVENT: no broadcast_attempt with lark_status=sent"; exit 1; }
-
-  echo "✓ event=$EVENT: 1 transition + ≥1 successful broadcast_attempt in audit"
-done
+echo "✓ Status: draft → ratified (commit: $(git rev-parse --short HEAD))"
+echo "✓ spec.html regenerated"
+echo "✓ approvals.md committed (3 PR Review approvals captured)"
+echo "✓ PR remains open: $PR_URL"
+echo ""
+echo "Audit (~/.facio-flow/audit.jsonl):"
+echo "  - 1 review_requested lifecycle_event (from active mode)"
+echo "  - 1 ratified lifecycle_event (no broadcast_attempt row — broadcast=false by design §5.2)"
+echo ""
+echo "Next:"
+echo "  - Flow Skill HARD-GATE detects status=ratified, chains to writing-plans"
+echo "  - writing-plans / executing-plans push impl commits to same PR branch"
+echo "  - Final PR merge (spec + impl + tests) transitions status to merged"
+echo ""
+echo "Do NOT manually merge the spec PR before implementation is ready."
 ```
 
-如果任一 `✗` → **halt**：M1 §11.2 #5 acceptance 未满足，不要假装 ratification 完成。该状态下：
-- 本地 commit (Step 6) 已发生且不撤销（spec.status 已是 ratified；这是真相）
-- 但 broadcast 未真实送达 → 必须解决（webhook 修复、retry、escalate）
-- 解决后重跑 Step 7 → 新的 broadcast_attempt row append（attempt 计数继续递增），直到 lark_status=sent 出现
-
-Exit message（all-pass 时）：
-
-```
-✓ Status: draft → ratified (commit: <sha>)
-✓ spec.html regenerated (sha256 in footer matches)
-✓ Audit trail (~/.facio-flow/audit.jsonl):
-  - review_requested: 1 lifecycle_event + N broadcast_attempts (last=sent)
-  - ratified: 1 lifecycle_event + M broadcast_attempts (last=sent)
-✓ Lark broadcasts: both events confirmed sent in durable audit log
-
-Next: 
-- Flow Skill HARD-GATE will detect ratified spec and chain to writing-plans
-- Or: user can explicitly invoke writing-plans when ready to start implementation
-```
-
-<HARD-GATE>
-Do NOT invoke writing-plans yourself. Let Flow Skill HARD-GATE pick it up on
-the next user message, OR have the user invoke it explicitly. This keeps the
-ratify → plan boundary clear in the audit trail.
-</HARD-GATE>
+退出 skill。Flow Skill 接管 chain 到 writing-plans。
