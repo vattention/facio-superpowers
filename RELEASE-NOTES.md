@@ -1,3 +1,50 @@
+## v2.4.0 (2026-05-20)
+
+### Changed — `spec-ratifier` PR-based redesign
+
+实施 design spec `facio-blueprint/docs/superpowers/specs/2026-05-20-spec-ratifier-pr-based-redesign.md`。spec-ratifier 从 chat-based approval 改造为 **PR-Review-based**：spec 与 implementation 在同一个 PR 里 ship，消除 spec ↔ impl drift。
+
+### 主要变化
+
+- **spec-ratifier 拆 active / resume 双模式**（Step 0 自动检测）：
+  - **Active mode**（无 PR）：`git push` + `gh pr create --draft` + 派发 `review_requested` Lark broadcast（interactive card v2.0），立刻退出
+  - **Resume mode**（PR 已存在）：dev 在 reviewer approve 完后回来重跑；AI 自动拉 PR Reviews API → 写 approvals.md（含 github_review_id）→ status flip → 单 commit 推到 PR 分支
+- **ratified event 不再发 Lark broadcast**（design §5.2）；仅 audit。spec.html 顶部 status footer 反映 ratified
+- **Ratify commit 推到 PR 分支后不 merge**——等 implementation commits 一起 ship；整个 PR (spec + impl + tests) 一起 merge 才是 status=merged
+- **新增 `gh` CLI + `gh auth login` 作为 active mode 必需依赖**（pre-check 检测，缺失输出 install runbook + halt）
+- **HARD-GATE 完全重写**：6 个 active 入口条件 + 4 个 resume 入口条件 + 4 个 refuse 场景
+- **Lark card v2.0**：blue header + reviewer @at mentions + "📖 View PR & Review" 按钮 + sha/change_id note
+
+### 依赖配套
+
+要求 **`@vattention/facio-flow@>=0.8.0`**（用 broadcast / lark_card / pr_url 三个新参数）
+
+### BC 影响
+
+- 旧 chat-based 流程不再可用——所有 ratification 必须走 GitHub PR
+- 旧 Step 5/6 单 commit 直接落 main 的模式被替换为"PR 分支 + 不 merge"
+- audit.jsonl ratified 事件**仍有 broadcast_attempt 行**（v0.8.0 behavior：broadcast=false 时附 lark_status=skipped；webhook 未触发但 audit 行存在）
+
+### 升级路径
+
+```bash
+# 升级两个 npm 包
+npm i -g @vattention/facio-flow@0.8.0 --registry https://npm.pkg.github.com
+npx @vattention/facio-superpowers@2.4.0 sync   # 同步 templates/skills（init-only 文件不被覆盖）
+
+# 重启 Claude Code 让 MCP server 重新拉起
+# 跑 gh auth login 如果未做过
+gh auth login
+```
+
+### Refs
+
+- design spec: `facio-blueprint/docs/superpowers/specs/2026-05-20-spec-ratifier-pr-based-redesign.md`
+- impl plan: `facio-blueprint/docs/superpowers/plans/2026-05-20-spec-ratifier-pr-based-redesign.md`
+- 配套 facio-flow v0.8.0（notify_spec_event broadcast/lark_card/pr_url）
+
+---
+
 ## v2.3.3 (2026-05-20)
 
 ### Improved — `spec-ratifier` pre-check 配置 UX
