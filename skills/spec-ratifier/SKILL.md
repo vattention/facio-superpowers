@@ -91,54 +91,68 @@ You MUST create a TodoWrite task for each step:
 
 **Important: Resume mode does NOT merge the PR.** Implementation commits will be appended to the same PR by writing-plans / executing-plans; the whole PR (spec + impl) merges as one unit later.
 
-## Step 1 · Pre-check (machine-verifiable, codex review B)
+## Step 0 · Mode Detection
 
 ```bash
-# Must be in product repo with the target spec
+# Run from product repo root
 SPEC=docs/superpowers/specs/<slug>.md
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+[ "$BRANCH" = "main" ] && { echo "✗ refusing to operate on main"; exit 1; }
+
+# gh CLI present?
+command -v gh >/dev/null 2>&1 || {
+  cat <<'EOF'
+✗ gh CLI not installed (required for spec-ratifier active/resume mode)
+
+Install:
+  • macOS:   brew install gh
+  • Linux:   https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+  • Windows: scoop install gh   (or choco install gh)
+
+Then run: gh auth login
+EOF
+  exit 1
+}
+gh auth status >/dev/null 2>&1 || { echo "✗ gh not authenticated — run: gh auth login"; exit 1; }
+
+# Mode = resume if PR exists, else active
+PR_URL=$(gh pr view --json url -q .url 2>/dev/null || true)
+if [ -n "$PR_URL" ]; then
+  MODE=resume
+else
+  MODE=active
+fi
+echo "→ mode: $MODE"
+```
+
+## Step 1 · Pre-check (common + mode-specific)
+
+```bash
+# Common pre-check (both modes)
 test -f "$SPEC" || { echo "✗ spec not found"; exit 1; }
 STATUS=$(grep -E '^status:' "$SPEC" | head -1 | awk '{print $2}')
 [ "$STATUS" = "draft" ] || { echo "✗ status=$STATUS, expected draft"; exit 1; }
 
-# Read change_id from frontmatter
 CHANGE_ID=$(grep -E '^change_id:' "$SPEC" | head -1 | awk '{print $2}')
 REVIEW=".harness/changes/$CHANGE_ID/self-review.md"
 test -f "$REVIEW" || { echo "✗ self-review.md missing — run spec-author Step 15"; exit 1; }
-
-# Verify self-review result + sha freshness
 grep -q '^result: pass' "$REVIEW" || { echo "✗ self-review.result != pass"; exit 1; }
 REVIEW_SHA=$(grep -E '^spec_sha:' "$REVIEW" | awk '{print $2}')
 CURRENT_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')
 [ "$REVIEW_SHA" = "$CURRENT_SHA" ] || \
-  { echo "✗ self-review stale: review_sha=$REVIEW_SHA, current=$CURRENT_SHA — re-run Step 15"; exit 1; }
+  { echo "✗ self-review stale — re-run Step 15"; exit 1; }
 
-# Auto-source committed harness env defaults if present.
-# Private repos may commit `.harness/config.env` with shared FACIO_LARK_WEBHOOK_URL;
-# public repos leave it absent and rely on per-developer shell exports.
+# Auto-source committed harness env defaults
 [ -f .harness/config.env ] && set -a && . .harness/config.env && set +a
-
-# Verify Lark webhook configured (M1 §11.2 #5)
 if [ -z "$FACIO_LARK_WEBHOOK_URL" ]; then
-  cat <<'EOF'
-✗ FACIO_LARK_WEBHOOK_URL not set
-
-Configure via one of:
-  • Personal:  add `export FACIO_LARK_WEBHOOK_URL=<url>` to ~/.zshrc
-  • Team:      create `.harness/config.env` with FACIO_LARK_WEBHOOK_URL=<url>
-               (skill auto-sources; commit only in PRIVATE repos)
-
-Webhook URL = Lark 群机器人 incoming webhook
-(群设置 → 群机器人 → 添加自定义机器人).
-
-Full runbook: .harness/README.md → "Lark webhook 配置"
-EOF
+  echo "✗ FACIO_LARK_WEBHOOK_URL not set — see .harness/README.md → Lark webhook 配置"
   exit 1
 fi
 
-echo "✓ pre-check passed"
+echo "✓ common pre-check passed (mode=$MODE)"
 ```
 
-All-`✓` is the only valid entry condition. Any `✗` → halt, surface to user.
+All-`✓` is the only valid entry condition for the chosen mode below.
 
 ## Step 2 · Derive Owner Set from Tier
 
