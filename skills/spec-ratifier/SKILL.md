@@ -7,19 +7,27 @@ description: L2 spec 评审调度 — 按 spec §6 Tier 分发到 PM / 设计 / 
 
 **Announce at start:** "I'm using the spec-ratifier skill to dispatch ratification review."
 
-spec-ratifier 把 spec-author 起草完毕（status=draft，self-review all-PASS）的 L2 spec 推送给 3 owner 评审，收齐 approval 后转 status 到 ratified，并触发 Lark broadcast / audit log。
+spec-ratifier 把 spec-author 起草完毕（status=draft，self-review all-PASS）的 L2 spec 通过 **GitHub PR + Reviews API** 推送给 3 owner 评审：active mode 开 PR 并通过 Lark card 通知 reviewer；resume mode 收齐 PR approvals 后转 status 到 ratified（PR 不 merge，等后续 implementation commits 一起 merge）。
 
 ## When to use this skill
 
-- spec-author Step 15 hints chain（self-review all-PASS 后）
-- 用户手动说 "ratify spec X" / "把 spec 推给评审"
-- Resume：cwd 有 draft spec.md 且 self-review checklist 已 PASS（spec-author 之前跑过）
+spec-ratifier has **two modes** (auto-detected on entry — see Step 0):
+
+- **Active mode** — no PR exists yet for the current branch:
+  - spec-author Step 15 hints chain（self-review all-PASS 后）
+  - 用户手动说 "ratify spec X" / "把 spec 推给评审"
+  - Pushes branch, opens a draft PR, dispatches `review_requested` Lark broadcast, then exits
+- **Resume mode** — PR already exists and reviewers have approved on the PR:
+  - 用户回来说 "approvals collected, finalize" / "resume spec-ratifier"
+  - Reads PR Reviews API, writes approvals.md, flips status draft → ratified, single commit + push (no merge)
 
 ## When NOT to use
 
 - status ≠ draft（已 ratified/implementing/etc）→ 不重复 ratify
 - self-review 没跑 / 有 FAIL → 先回 spec-author Step 15 修
 - 用户想"先讨论一下" → 回 spec-author Step 1 wrap brainstorming
+- 当前在 main 分支 → 先切到 feature 分支再 ratify
+- 未安装 gh CLI / 未 `gh auth login` → 先安装认证再回来
 
 <HARD-GATE>
 spec-ratifier has two modes — auto-detect on entry:
