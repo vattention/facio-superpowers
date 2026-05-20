@@ -1,3 +1,49 @@
+## v2.3.3 (2026-05-20)
+
+### Improved — `spec-ratifier` pre-check 配置 UX
+
+**问题**：`spec-ratifier` pre-check 检测 `FACIO_LARK_WEBHOOK_URL` 未设时直接 halt，错误信息仅指向 spec 内部锚点 "Task 1 Step 4"，新人完全摸不着头脑——不知道 webhook URL 从哪里拿、配在哪里、为什么必须配。多产品场景下不同飞书群对应不同 webhook，单一 shell profile export 也不够用。
+
+**根本原因**：halt 设计本身是对的（ratification 语义包含"已通知 reviewers"，广播缺失则 status 不应转 ratified，详见 spec M1 §11.2 #5），但 halt 周围缺少配置 runbook + team-shared 加载机制。
+
+### 改动
+
+- `skills/spec-ratifier/SKILL.md`
+  - Step 1 pre-check 新增 `[ -f .harness/config.env ] && set -a && . .harness/config.env && set +a`，自动加载团队基线 env
+  - `FACIO_LARK_WEBHOOK_URL not set` 错误信息从干瘪一行扩展为 inline runbook（个人 shell export / 团队 `.harness/config.env` 两条路径 + 私有仓库限制 + 飞书群机器人获取方式）
+  - HARD-GATE 与 failure modes table 的错误指引同步更新，指向 `.harness/README.md` → "Lark webhook 配置"
+
+- `templates/harness-config.env`（**新文件**）
+  - 团队共用环境变量骨架，默认所有变量 commented-out（空模板 = no-op，不会反向覆盖 shell 已 export 的值）
+  - 内含 `FACIO_LARK_WEBHOOK_URL` 注释模板 + 私有/公开仓库提交规则说明 + file-wins 优先级文档
+
+- `templates/harness-readme.md`
+  - 文件清单加 `config.env`（标注仅私有仓库可提交）
+  - 新增 "Lark webhook 配置" 章节：获取方式 + 个人/团队两套配置 + file-wins 优先级 + 公开仓库 gitignore 警示
+
+- `cli.js`
+  - `TEMPLATE_MANIFEST` 注册 `harness-config.env` → `.harness/config.env`，`phase: 'init-only'`、`harness: true`
+  - `init-only` 语义保证 sync 不会覆盖已配的 webhook URL
+
+### 消费仓升级路径
+
+```bash
+# 新 repo：init 自动落地 config.env 骨架
+npx @vattention/facio-superpowers@latest init --harness
+
+# 已 init repo：重跑 init 拿 config.env 骨架（其它 init-only 文件已存在会跳过）
+npx @vattention/facio-superpowers@latest init --harness
+# 或手动创建 .harness/config.env，从 facio-superpowers/templates/harness-config.env 拷模板内容
+
+# .harness/README.md 因属 init-only，已 init repo 不会自动拿到新章节——需要手动 patch
+```
+
+### 已知 gap
+
+`.harness/README.md` 是 `init-only`，已 init 的老 repo 不会拿到新 "Lark webhook 配置" 章节。短期靠 SKILL.md 错误信息内置 runbook 缓解（halt 信息自包含可操作内容）；中期值得做一次性 migration 脚本同步 README 的新章节回写。
+
+---
+
 ## v2.3.2 (2026-05-15)
 
 ### Fixed — `rebuild-catalog.sh` template 补回 §C.4 schema validation
