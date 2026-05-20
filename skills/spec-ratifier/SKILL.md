@@ -154,7 +154,7 @@ echo "✓ common pre-check passed (mode=$MODE)"
 
 All-`✓` is the only valid entry condition for the chosen mode below.
 
-## Step 2 · Derive Owner Set from Tier
+## Step 2 · Derive Owner Set from Tier (both modes)
 
 读 spec §6 决策（grep `^**决策**：` 或 frontmatter `tier:`）：
 
@@ -164,172 +164,132 @@ All-`✓` is the only valid entry condition for the chosen mode below.
 | Normal | 3 owner 全 approve（PM + designer + engineer，frontmatter `owners.{pm,designer,engineer}`）|
 | Large | 3 owner + 跨产品契约 owner（若 §5 涉及 `blueprint/contracts/`，则从 `blueprint/contracts/CODEOWNERS` 取） |
 
-## Step 3 · Dispatch Review (REAL broadcast, codex 2nd-round #2)
+## Step 3A · Active Mode: Push branch + Open Draft PR
 
-**Lark broadcast 必经 — review dispatch 是独立 event，不与 Step 7 ratified 通知合并：**
+```bash
+# Push current branch
+git push -u origin "$BRANCH"
 
-`notify_spec_event(event="review_requested")` 是 dispatch 真实推送的工具入口。Step 3 完成 = review 已经发到 3 owner 群组，可以开始等 approval。
+# 幂等：复用现有 PR；否则 create draft
+PR_URL=$(gh pr view --json url -q .url 2>/dev/null) || PR_URL=""
+if [ -z "$PR_URL" ]; then
+  # Compose PR body (referenced from §3 of design spec)
+  PR_BODY_FILE=$(mktemp)
+  cat > "$PR_BODY_FILE" <<EOF
+## Spec PR
 
+This PR carries spec.md + spec.html for review. Implementation commits will be appended to this same branch.
+
+- **Change ID**: \`$CHANGE_ID\`
+- **Tier**: $TIER
+- **Self-review**: see \`.harness/changes/$CHANGE_ID/self-review.md\`
+
+### Review checklist
+
+- [ ] PM (@pm-user): 产品视角符合期望
+- [ ] Designer (@designer-user): 设计视角符合期望
+- [ ] Engineer (@eng-user): 研发视角可实施
+
+After 3 approvals, dev will run spec-ratifier resume to finalize. **Do not merge this PR until implementation commits are also pushed.**
+EOF
+
+  PR_URL=$(gh pr create --draft \
+    --title "spec: $CHANGE_ID" \
+    --body-file "$PR_BODY_FILE" \
+    --label "spec-review" \
+    --json url -q .url)
+  rm "$PR_BODY_FILE"
+fi
+echo "✓ PR: $PR_URL"
 ```
-# 1. 构造 broadcast message body（caller 写完整文案，handler 不模板化关键字段）
-SPEC_HTML_URL="https://github.com/<org>/<repo>/blob/<branch>/<spec.html relative path>"
+
+## Step 4A · Build review_requested Lark Card Payload
+
+构造 interactive card v2.0 payload（结构参考 design spec 附录 A.1）：
+
+```bash
 DEADLINE=$(date -u -d "+2 weekdays" +"%Y-%m-%d" 2>/dev/null || date -v+2d +"%Y-%m-%d")
-LARK_MESSAGE="[Spec review request] $CHANGE_ID
-Tier: $TIER
-Owners: pm=@pm-user, designer=@designer-user, engineer=@engineer-user
-spec.html: $SPEC_HTML_URL
-Deadline: $DEADLINE
-Reply 'approve' / 'request changes' / 'reject' in this thread."
 
-# 2. 先把 message 给 user 看（chat 确认文案）
-echo "$LARK_MESSAGE"
-# wait for user "ok"
+# Owner open_ids 从 frontmatter or role-bindings 查
+PM_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep 'pm:' | sed 's/.*pm:\s*//; s/^@//')
+DESIGNER_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep 'designer:' | sed 's/.*designer:\s*//; s/^@//')
+ENG_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep 'engineer:' | sed 's/.*engineer:\s*//; s/^@//')
 
-# 3. 调 MCP tool 实际推送 — spec.status 仍是 draft，event=review_requested 校验通过
+# Card JSON (本 skill 由 AI 构造完整 JSON 字串传给 notify_spec_event)
+LARK_CARD=$(cat <<EOF
+{
+  "header": {
+    "title": { "tag": "plain_text", "content": "📋 Spec Review Request" },
+    "template": "blue"
+  },
+  "elements": [
+    { "tag": "div",
+      "fields": [
+        { "is_short": true, "text": { "tag": "lark_md", "content": "**Change ID**\n$CHANGE_ID" }},
+        { "is_short": true, "text": { "tag": "lark_md", "content": "**Tier**\n$TIER" }}
+      ]
+    },
+    { "tag": "div",
+      "text": { "tag": "lark_md",
+        "content": "**Reviewers**\n- PM: <at id=\"$PM_OPEN_ID\">@PM</at>\n- Designer: <at id=\"$DESIGNER_OPEN_ID\">@Designer</at>\n- Engineer: <at id=\"$ENG_OPEN_ID\">@Engineer</at>"
+      }
+    },
+    { "tag": "div", "text": { "tag": "lark_md", "content": "**Deadline**: $DEADLINE" }},
+    { "tag": "hr" },
+    { "tag": "action",
+      "actions": [
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "📖 View PR & Review" },
+          "type": "primary",
+          "url": "$PR_URL"
+        }
+      ]
+    },
+    { "tag": "note",
+      "elements": [
+        { "tag": "plain_text", "content": "sha: ${CURRENT_SHA:0:12}… · change_id: $CHANGE_ID" }
+      ]
+    }
+  ]
+}
+EOF
+)
+
+# 给 user 看 + 确认 ("ok" / 改文案)
+echo "$LARK_CARD" | jq .  # pretty print
+echo ""
+echo "Card OK? (y/n)"
 ```
+
+## Step 5A · Dispatch review_requested via notify_spec_event
 
 In Claude Code:
 
-```
+```javascript
 mcp__facio-flow__notify_spec_event({
   spec_path: "<relative path>",
   event: "review_requested",
   actor: "spec-ratifier",
-  lark_message: "<full $LARK_MESSAGE content>"
+  pr_url: "<PR_URL>",
+  lark_card: <Step 4A 构造的 card JSON>,
+  // broadcast 不传 — DEFAULT_BROADCAST[review_requested]=true
 })
 ```
 
-**Exit 条件 of Step 3：** 返回值含 `lark_status: sent`。`failed` / `skipped` → retry 最多 3 次（间隔 30s）；3 次都失败 → escalate 用户，halt skill。
+**Exit 条件 of Step 5A：** 返回值含 `lark_status: sent`。若 `failed` 重试最多 3 次（30s 间隔）；最终失败 escalate user halt skill。
 
-注意：spec.status 仍是 draft。Step 3 **不**写 audit entry 为"ratified"——`review_requested` 是独立 event，audit 中独立一行。
-
-## Step 4 · Collect Approvals (auditable, codex review #2)
-
-M1 收齐 approval 的机制 = **git-tracked artifact**，不是 chat 问答。每个 approver 给出明确 "approve" 后立刻写一行进 `.harness/changes/<change_id>/approvals.md`，包含可审计字段：
+## Step 6A · Exit Active Mode
 
 ```bash
-mkdir -p ".harness/changes/$CHANGE_ID"
-APPROVALS=".harness/changes/$CHANGE_ID/approvals.md"
-# 首次初始化（仅 header）
-[ -f "$APPROVALS" ] || cat > "$APPROVALS" <<EOF
-# Approvals · $CHANGE_ID
-
-| role | approver | spec_sha | timestamp | note |
-|------|----------|----------|-----------|------|
-EOF
+echo "✓ Spec PR opened and review broadcast dispatched"
+echo "  PR: $PR_URL"
+echo "  Reviewers will be notified in Lark"
+echo ""
+echo "Next: come back after 3 approvals are collected on the PR."
+echo "Resume by running spec-ratifier again — it will auto-detect resume mode."
 ```
 
-每收到一个 approver "approve" 时，spec-ratifier append 一行（**完整 64-char sha**，gate 用完整 sha 对比，避免截断错配 — codex 2nd-round #4）：
-
-```bash
-SPEC_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')  # full 64 chars
-TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-# Required by Tier: PM / designer / engineer (Normal); skill 与每个 owner 单独确认
-# 注意：用完整 sha，不截断。展示给人看时单独 print short = ${SPEC_SHA:0:12}
-echo "| pm | @pm-user | $SPEC_SHA | $TS | $NOTE |" >> "$APPROVALS"
-echo "| designer | @designer-user | $SPEC_SHA | $TS | $NOTE |" >> "$APPROVALS"
-echo "| engineer | @engineer-user | $SPEC_SHA | $TS | $NOTE |" >> "$APPROVALS"
-```
-
-**spec_sha 字段是关键不变量**：approval 绑定到当时的 spec 内容。如果 spec 在某 approver approve 后又改了内容（spec_sha 变），后续 approver 看到 sha 不一致 → 必须重 approve 之前的所有 owner。
-
-Step 4 出口条件（gate；全用完整 sha 对比）：
-
-```bash
-CURRENT_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')
-# All approval rows must reference the current sha
-STALE=$(awk -F'|' -v cur="$CURRENT_SHA" 'NR>2 && $4 ~ /[a-f0-9]{64}/ && $4 !~ cur {print}' "$APPROVALS" | wc -l)
-[ "$STALE" -eq 0 ] || { echo "✗ $STALE approval row(s) on stale spec_sha; re-collect"; exit 1; }
-# All required roles present
-for ROLE in pm designer engineer; do
-  grep -qE "^\|\s*$ROLE\s*\|" "$APPROVALS" || { echo "✗ missing approval: $ROLE"; exit 1; }
-done
-echo "✓ all approvals fresh + complete"
-```
-
-如有 MUST FIX 反馈：
-- 把 fix request 加到 spec §4 Open Issues + commit
-- 回 spec-author Step 2 修改 → 重跑 Step 15 self-review（spec_sha 变了）
-- approvals.md 全部失效（spec_sha 不匹配），需重新收集
-- status 保持 draft（不转）
-
-## Step 5 · Transition Status draft → ratified
-
-调 superpowers util（M0 已实装，spec §4.5 + spec-status.mjs）：
-
-```bash
-node scripts/spec-status.mjs write <spec.md> ratified
-```
-
-util 行为：
-1. 校验合法转换（draft → ratified ∈ `LEGAL_TRANSITIONS` 表；非法 → throw + exit 1）
-2. 改 frontmatter `status: draft` → `status: ratified`
-3. 不 commit（caller 决定时机；本 step Step 6 一并 commit）
-
-CLI 命令也支持 `read <spec.md>` 查询当前 status，`validate <from> <to>` 提前预检（exit 0 = 合法）。
-
-若 spec-status.mjs 不存在 → product repo 没 init 过 harness → 提示用户先 init。
-
-## Step 6 · Regenerate spec.html
-
-```bash
-node scripts/generate-spec-html.mjs <spec.md>
-```
-
-**Single commit** with status change + html regen + approvals.md：
-
-```bash
-git add <spec.md> <spec.html> ".harness/changes/$CHANGE_ID/approvals.md"
-git commit -m "$(cat <<'EOF'
-chore(spec): ratify <change_id>
-
-Tier: <Tier>
-Approvers (see .harness/changes/<change_id>/approvals.md):
-  - pm: @pm-user
-  - designer: @designer-user
-  - engineer: @engineer-user
-Self-review: .harness/changes/<change_id>/self-review.md (15/15 PASS)
-
-Co-Authored-By: spec-ratifier
-EOF
-)"
-```
-
-## Step 7 · Call notify_spec_event (POST-COMMIT, REQUIRED)
-
-```javascript
-// invoke Flow MCP tool — AFTER Step 6 commit because notify_spec_event reads
-// spec.status from disk and verifies it equals "ratified" (strict state check,
-// codex 1st-round #1).
-mcp__facio-flow__notify_spec_event({
-  spec_path: "<relative-path-from-flow-base>",
-  event: "ratified",
-  actor: "spec-ratifier",
-  note: "approvers: pm=@pm-user, designer=@designer-user, engineer=@engineer-user",
-  lark_message: "[Spec ratified] <change_id>\nApproved by 3 owners. Next: implementation will be planned by writing-plans.\nspec.html: <url>"
-})
-```
-
-**Parse the response (codex 2nd-round #C):**
-
-The tool returns text containing a `lark_status:` line. spec-ratifier MUST parse it:
-
-| `lark_status` | Action |
-|--------------|--------|
-| `sent` | ✓ Step 7 complete; chain to Step 8 |
-| `failed (...)` | Retry up to **3 times** with 30s backoff; if still `failed` → **escalate to user**, halt skill. Audit is persisted but §11.2 #5 acceptance is NOT satisfied |
-| `skipped` | Means webhook env var missing — should have been caught by pre-check; halt skill |
-
-**Failure modes table:**
-
-| Symptom | Cause | Action |
-|---------|-------|--------|
-| `isError: true, status mismatch` | Step 5 transition 未先 commit / commit 失败 | 回 Step 5 修，重 Step 7 |
-| `isError: true, spec not found` | spec_path 参数错（绝对 vs 相对）| 修参数重试 |
-| `isError: true, rejected ... requires reason` | event=rejected 但无 note / rejected_reason | 补 note 重试 |
-| Response contains `lark_status: failed` | webhook URL 失效 / Lark 服务暂时下线 | Retry 3 次（30s 间隔）；最终失败 escalate；§11.2 #5 未满足 |
-| Response contains `lark_status: skipped` | `FACIO_LARK_WEBHOOK_URL` 未设 (pre-check 应阻拦) | halt；按 `.harness/README.md` → Lark webhook 配置 修复 |
-| MCP 离线 / tool 不可达 | Flow MCP server down | 完整 halt：本地 commit 已发生但 audit / broadcast 未触发 → **不**视为 ratification 完成；必须等 MCP 恢复重跑 Step 7 |
+退出 skill。AI session 可以转去做别的（其它 feature / 等待 review）。
 
 ## Step 8 · Exit Hint (codex 3rd-round Minor #3 + 4th-round F2: audit-backed proof)
 
