@@ -177,14 +177,46 @@ All-`✓` is the only valid entry condition for the chosen mode below.
 TIER=$(grep -E '^tier:' "$SPEC" | head -1 | awk '{print $2}')
 [ -n "$TIER" ] || { echo "✗ tier not found in spec frontmatter"; exit 1; }
 
-# Extract owner open_ids (used by both PR body and Lark card)
-# YAML may quote values like  pm: "@user"  — strip both quotes and leading @
-PM_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  pm:' | sed -E 's/.*pm:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
-DESIGNER_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  designer:' | sed -E 's/.*designer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
-ENG_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  engineer:' | sed -E 's/.*engineer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+# Extract owner GH logins from frontmatter
+# YAML may quote values; strip both quotes and leading @
+PM_LOGIN=$(grep -A 3 '^owners:' "$SPEC" | grep '  pm:' | sed -E 's/.*pm:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+DESIGNER_LOGIN=$(grep -A 3 '^owners:' "$SPEC" | grep '  designer:' | sed -E 's/.*designer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+ENG_LOGIN=$(grep -A 3 '^owners:' "$SPEC" | grep '  engineer:' | sed -E 's/.*engineer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
 
-echo "→ tier: $TIER, owners: pm=@$PM_OPEN_ID designer=@$DESIGNER_OPEN_ID engineer=@$ENG_OPEN_ID"
+[ -n "$PM_LOGIN" ] && [ -n "$DESIGNER_LOGIN" ] && [ -n "$ENG_LOGIN" ] || {
+  echo "✗ frontmatter owners.{pm,designer,engineer} not all set (got pm=$PM_LOGIN designer=$DESIGNER_LOGIN engineer=$ENG_LOGIN)"
+  exit 1
+}
+
+# Resolve GH login → Lark open_id + display name via role-bindings.yaml
+ROLE_BINDINGS=".harness/role-bindings.yaml"
+test -f "$ROLE_BINDINGS" || { echo "✗ $ROLE_BINDINGS not found — run init --harness"; exit 1; }
+
+resolve_owner() {
+  local login="$1"
+  local result
+  result=$(node scripts/role-lookup.mjs "$ROLE_BINDINGS" "$login") || {
+    echo "$result" >&2
+    return 1
+  }
+  echo "$result"
+}
+
+PM_RESOLVED=$(resolve_owner "$PM_LOGIN") || exit 1
+DESIGNER_RESOLVED=$(resolve_owner "$DESIGNER_LOGIN") || exit 1
+ENG_RESOLVED=$(resolve_owner "$ENG_LOGIN") || exit 1
+
+PM_OPEN_ID=$(echo "$PM_RESOLVED" | cut -f1); PM_NAME=$(echo "$PM_RESOLVED" | cut -f2)
+DESIGNER_OPEN_ID=$(echo "$DESIGNER_RESOLVED" | cut -f1); DESIGNER_NAME=$(echo "$DESIGNER_RESOLVED" | cut -f2)
+ENG_OPEN_ID=$(echo "$ENG_RESOLVED" | cut -f1); ENG_NAME=$(echo "$ENG_RESOLVED" | cut -f2)
+
+echo "→ tier: $TIER"
+echo "  pm:       @$PM_LOGIN  →  $PM_OPEN_ID ($PM_NAME)"
+echo "  designer: @$DESIGNER_LOGIN  →  $DESIGNER_OPEN_ID ($DESIGNER_NAME)"
+echo "  engineer: @$ENG_LOGIN  →  $ENG_OPEN_ID ($ENG_NAME)"
 ```
+
+**Contract change**: spec frontmatter `owners.{pm,designer,engineer}` now stores **GH login** (e.g. `@zhangsan`), not Lark open_id or display name. Identity is resolved at run time via `.harness/role-bindings.yaml` — single source of truth.
 
 ## Step 3A · Active Mode: Push branch + Open Draft PR
 
