@@ -16,6 +16,7 @@
 # users:
 #   - id: ou_xxx
 #     name: 张三
+#     github_login: zhangsan
 #     function: frontend-dev
 #     strictness: medium
 users: []

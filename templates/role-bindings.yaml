@@ -10,8 +10,9 @@
 # users: 团队成员列表（baseline 留空，项目侧补齐）
 # ---------------------------------------------------------------------------
 # Schema:
-#   - id: ou_xxx                # Lark / Feishu open_id
-#     name: 张三                 # 显示名（仅展示用）
+#   - id: ou_xxx                # Lark / Feishu open_id (required)
+#     name: 张三                 # 显示名（仅展示用，required）
+#     github_login: zhangsan    # GitHub login（用于 spec-ratifier 反查身份；required if user 在某 spec frontmatter 中被引用为 owner）
 #     function: frontend-dev    # frontend-dev | non-frontend-dev | non-dev
 #     strictness: low           # low | medium | high
 #     products: [video-editor]  # 可选
