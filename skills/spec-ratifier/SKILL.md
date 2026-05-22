@@ -37,6 +37,9 @@ spec-ratifier has two modes — auto-detect on entry:
   2. .harness/changes/<change_id>/self-review.md exists with `result: pass`
      and spec_sha matches sha256(spec.md)
   3. FACIO_LARK_WEBHOOK_URL set (via .harness/config.env or shell)
+  3a. FACIO_LARK_WIKI_NODE set (via .harness/config.env) OR SKIP_WIKI_UPLOAD=1
+  3b. .harness/role-bindings.yaml exists with entries matching frontmatter
+      owners.{pm,designer,engineer} via github_login field
   4. `gh --version` available AND `gh auth status` passes (NEW in v2.4.0)
   5. current branch != main
   6. NO open PR for this branch (else use resume mode)
@@ -157,7 +160,21 @@ if [ -z "$FACIO_LARK_WEBHOOK_URL" ]; then
   exit 1
 fi
 
-echo "✓ common pre-check passed (mode=$MODE)"
+# Validate FACIO_LARK_WIKI_NODE (or explicit skip)
+if [ "${SKIP_WIKI_UPLOAD:-0}" != "1" ] && [ -z "${FACIO_LARK_WIKI_NODE:-}" ]; then
+  echo "✗ FACIO_LARK_WIKI_NODE not set in .harness/config.env"
+  echo "  See spec 2026-05-22-spec-ratifier-lark-wiki-render §3 module 2 for default value"
+  echo "  Emergency: re-run with SKIP_WIKI_UPLOAD=1"
+  exit 1
+fi
+
+# Validate role-bindings.yaml exists (active mode only); per-owner lookup happens in Step 2
+if [ "$MODE" = "active" ]; then
+  ROLE_BINDINGS=".harness/role-bindings.yaml"
+  test -f "$ROLE_BINDINGS" || { echo "✗ $ROLE_BINDINGS missing — run init --harness"; exit 1; }
+fi
+
+echo "✓ common pre-check passed (mode=$MODE; wiki=${FACIO_LARK_WIKI_NODE:-SKIPPED})"
 ```
 
 All-`✓` is the only valid entry condition for the chosen mode below.
