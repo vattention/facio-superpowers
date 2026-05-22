@@ -1,3 +1,37 @@
+## v2.5.0 (2026-05-22)
+
+### Changed — `spec-ratifier` Lark Wiki render button + owner identity lookup
+
+实施 design spec `facio-blueprint/docs/superpowers/specs/2026-05-22-spec-ratifier-lark-wiki-render.md`（refines 2026-05-20 PR-based redesign §5.1 / 附录 A.1 + Step 2/4A）。让非研发 reviewer 在飞书内原生渲染查看 spec，避免读 GitHub PR Files-changed 的代码 diff；同时把 owner identity 归集到 `.harness/role-bindings.yaml` 作单点真源。
+
+### 主要变化
+
+- **Lark `review_requested` 卡片改双按钮**：
+  - `📄 阅读 Spec` (default) → Lark Wiki 渲染版（非研发 reviewer 阅读入口）
+  - `✍️ 在 PR 上批准` (primary) → GitHub PR URL（reviewer 在 PR Reviews API 签名）
+  - 空 `WIKI_URL` 时 graceful degrade 回单 PR 按钮（紧急逃生口 `SKIP_WIKI_UPLOAD=1`）
+- **NEW Step 3.5A · Lark Wiki upload**：active mode 通过 `lark-doc` skill 上传 spec.md 到 wiki 节点；idempotent via `.harness/changes/<id>/wiki-meta.json` sha cache（首次 create，后续 amendment 同 doc_id update，URL 不变）
+- **Step 2 owner identity 改造**：spec frontmatter `owners.{pm,designer,engineer}` 现在存 **GH login**（如 `@Dawinia`），不再硬编 open_id；spec-ratifier 通过新 helper `scripts/role-lookup.mjs` 从 `.harness/role-bindings.yaml` 反查 Lark open_id + 显示名供 `<at>` mention 用
+- **role-bindings.yaml schema 扩展**：`users[]` 加 optional 字段 `github_login`（被某 spec 引用为 owner 时事实上必填，缺失时 lookup halt 并提示补哪一行）
+- **HARD-GATE 扩展**：active mode pre-check 增加 `FACIO_LARK_WIKI_NODE` + `.harness/role-bindings.yaml` 存在性检查
+- **新增 `scripts/role-lookup.mjs`**：YAML loader + GH login lookup helper（零 npm 依赖；6 单测覆盖 hit / miss / empty / missing file / partial github_login / CLI mode）
+- **Step 6A 退出消息**：显示 PR URL + Wiki URL 双链接
+
+### 依赖配套
+
+- 消费方 `.harness/config.env` 需配 `FACIO_LARK_WIKI_NODE`（或 `SKIP_WIKI_UPLOAD=1` 紧急绕过）
+- 消费方 `.harness/role-bindings.yaml` 的 `users[]` 条目需补 `github_login` 字段（只对被 spec 引用为 owner 的 user 必填）
+- 复用既有 `lark-doc` skill（要求 `--as user` 身份；wiki write 权限走 user 不走 bot）
+
+### BC 影响
+
+⚠️ **Breaking for callers**：
+- 旧 spec frontmatter `owners.{pm,designer,engineer}` 值（open_id / 显示名）必须迁移到 GH login + role-bindings.yaml 配合
+- 旧 `users[]` 条目若被某 spec 引用但缺 `github_login`，Step 2 会 halt（明确指引补哪一行）
+- active mode pre-check 新增要求 `.harness/role-bindings.yaml` 存在 + `FACIO_LARK_WIKI_NODE` 已配置（或显式 `SKIP_WIKI_UPLOAD=1`）
+
+---
+
 ## v2.4.0 (2026-05-20)
 
 ### Changed — `spec-ratifier` PR-based redesign
