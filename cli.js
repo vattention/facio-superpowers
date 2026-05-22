@@ -86,6 +86,7 @@ const TEMPLATE_MANIFEST = [
   { src: 'rebuild-catalog.sh',                 dest: 'scripts/rebuild-catalog.sh',          phase: 'sync', harness: true, executable: true },
   { src: 'spec-status.mjs',                    dest: 'scripts/spec-status.mjs',             phase: 'sync', harness: true, executable: true },
   { src: 'scripts-generate-spec-html.mjs',     dest: 'scripts/generate-spec-html.mjs',      phase: 'sync', harness: true, executable: true },
+  { src: 'scripts-role-lookup.mjs',            dest: 'scripts/role-lookup.mjs',             phase: 'sync', harness: true, executable: true },
   { src: 'github-workflows-catalog-sync.yml',  dest: '.github/workflows/catalog-sync.yml',  phase: 'sync', harness: true },
   { src: 'github-workflows-spec-sync.yml',     dest: '.github/workflows/spec-sync.yml',     phase: 'sync', harness: true },
   { src: 'github-workflows-mitchell-loop.yml',         dest: '.github/workflows/mitchell-loop.yml',         phase: 'sync', harness: true },

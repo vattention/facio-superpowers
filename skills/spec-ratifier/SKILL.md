@@ -37,6 +37,9 @@ spec-ratifier has two modes — auto-detect on entry:
   2. .harness/changes/<change_id>/self-review.md exists with `result: pass`
      and spec_sha matches sha256(spec.md)
   3. FACIO_LARK_WEBHOOK_URL set (via .harness/config.env or shell)
+  3a. FACIO_LARK_WIKI_NODE set (via .harness/config.env) OR SKIP_WIKI_UPLOAD=1
+  3b. .harness/role-bindings.yaml exists with entries matching frontmatter
+      owners.{pm,designer,engineer} via github_login field
   4. `gh --version` available AND `gh auth status` passes (NEW in v2.4.0)
   5. current branch != main
   6. NO open PR for this branch (else use resume mode)
@@ -157,7 +160,21 @@ if [ -z "$FACIO_LARK_WEBHOOK_URL" ]; then
   exit 1
 fi
 
-echo "✓ common pre-check passed (mode=$MODE)"
+# Validate FACIO_LARK_WIKI_NODE (or explicit skip)
+if [ "${SKIP_WIKI_UPLOAD:-0}" != "1" ] && [ -z "${FACIO_LARK_WIKI_NODE:-}" ]; then
+  echo "✗ FACIO_LARK_WIKI_NODE not set in .harness/config.env"
+  echo "  See spec 2026-05-22-spec-ratifier-lark-wiki-render §3 module 2 for default value"
+  echo "  Emergency: re-run with SKIP_WIKI_UPLOAD=1"
+  exit 1
+fi
+
+# Validate role-bindings.yaml exists (active mode only); per-owner lookup happens in Step 2
+if [ "$MODE" = "active" ]; then
+  ROLE_BINDINGS=".harness/role-bindings.yaml"
+  test -f "$ROLE_BINDINGS" || { echo "✗ $ROLE_BINDINGS missing — run init --harness"; exit 1; }
+fi
+
+echo "✓ common pre-check passed (mode=$MODE; wiki=${FACIO_LARK_WIKI_NODE:-SKIPPED})"
 ```
 
 All-`✓` is the only valid entry condition for the chosen mode below.
@@ -177,14 +194,46 @@ All-`✓` is the only valid entry condition for the chosen mode below.
 TIER=$(grep -E '^tier:' "$SPEC" | head -1 | awk '{print $2}')
 [ -n "$TIER" ] || { echo "✗ tier not found in spec frontmatter"; exit 1; }
 
-# Extract owner open_ids (used by both PR body and Lark card)
-# YAML may quote values like  pm: "@user"  — strip both quotes and leading @
-PM_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  pm:' | sed -E 's/.*pm:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
-DESIGNER_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  designer:' | sed -E 's/.*designer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
-ENG_OPEN_ID=$(grep -A 3 '^owners:' "$SPEC" | grep '  engineer:' | sed -E 's/.*engineer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+# Extract owner GH logins from frontmatter
+# YAML may quote values; strip both quotes and leading @
+PM_LOGIN=$(grep -A 3 '^owners:' "$SPEC" | grep '  pm:' | sed -E 's/.*pm:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+DESIGNER_LOGIN=$(grep -A 3 '^owners:' "$SPEC" | grep '  designer:' | sed -E 's/.*designer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
+ENG_LOGIN=$(grep -A 3 '^owners:' "$SPEC" | grep '  engineer:' | sed -E 's/.*engineer:[[:space:]]*"?@?//; s/"[[:space:]]*$//')
 
-echo "→ tier: $TIER, owners: pm=@$PM_OPEN_ID designer=@$DESIGNER_OPEN_ID engineer=@$ENG_OPEN_ID"
+[ -n "$PM_LOGIN" ] && [ -n "$DESIGNER_LOGIN" ] && [ -n "$ENG_LOGIN" ] || {
+  echo "✗ frontmatter owners.{pm,designer,engineer} not all set (got pm=$PM_LOGIN designer=$DESIGNER_LOGIN engineer=$ENG_LOGIN)"
+  exit 1
+}
+
+# Resolve GH login → Lark open_id + display name via role-bindings.yaml
+ROLE_BINDINGS=".harness/role-bindings.yaml"
+test -f "$ROLE_BINDINGS" || { echo "✗ $ROLE_BINDINGS not found — run init --harness"; exit 1; }
+
+resolve_owner() {
+  local login="$1"
+  local result
+  result=$(node scripts/role-lookup.mjs "$ROLE_BINDINGS" "$login") || {
+    echo "$result" >&2
+    return 1
+  }
+  echo "$result"
+}
+
+PM_RESOLVED=$(resolve_owner "$PM_LOGIN") || exit 1
+DESIGNER_RESOLVED=$(resolve_owner "$DESIGNER_LOGIN") || exit 1
+ENG_RESOLVED=$(resolve_owner "$ENG_LOGIN") || exit 1
+
+PM_OPEN_ID=$(echo "$PM_RESOLVED" | cut -f1); PM_NAME=$(echo "$PM_RESOLVED" | cut -f2)
+DESIGNER_OPEN_ID=$(echo "$DESIGNER_RESOLVED" | cut -f1); DESIGNER_NAME=$(echo "$DESIGNER_RESOLVED" | cut -f2)
+ENG_OPEN_ID=$(echo "$ENG_RESOLVED" | cut -f1); ENG_NAME=$(echo "$ENG_RESOLVED" | cut -f2)
+
+echo "→ tier: $TIER"
+echo "  pm:       @$PM_LOGIN  →  $PM_OPEN_ID ($PM_NAME)"
+echo "  designer: @$DESIGNER_LOGIN  →  $DESIGNER_OPEN_ID ($DESIGNER_NAME)"
+echo "  engineer: @$ENG_LOGIN  →  $ENG_OPEN_ID ($ENG_NAME)"
 ```
+
+**Contract change**: spec frontmatter `owners.{pm,designer,engineer}` now stores **GH login** (e.g. `@zhangsan`), not Lark open_id or display name. Identity is resolved at run time via `.harness/role-bindings.yaml` — single source of truth.
 
 ## Step 3A · Active Mode: Push branch + Open Draft PR
 
@@ -227,6 +276,81 @@ fi
 echo "✓ PR: $PR_URL"
 ```
 
+## Step 3.5A · Active Mode: Upload spec.md to Lark Wiki
+
+`spec.md` 上传到 Lark Wiki，让非研发 reviewer 在飞书内原生渲染查看（避免读 GitHub PR Files-changed 视图的代码 diff）。
+
+**Idempotent re-run semantics**：第一次 create，后续 amendment 重跑同 doc_id update（URL 不变）；sha 一致时 skip。
+
+```bash
+WIKI_META=".harness/changes/$CHANGE_ID/wiki-meta.json"
+WIKI_NODE="${FACIO_LARK_WIKI_NODE:-}"
+
+if [ "${SKIP_WIKI_UPLOAD:-0}" = "1" ]; then
+  echo "⚠ --skip-wiki-upload set; skipping Lark Wiki upload (fallback to single PR-only button)"
+  WIKI_URL=""
+elif [ -z "$WIKI_NODE" ]; then
+  echo "✗ FACIO_LARK_WIKI_NODE not set in .harness/config.env"
+  echo "  Either set it (default: B7z5wY5lNiOCXhkRDAxcDfO3nPf for facio-blueprint)"
+  echo "  Or re-run with SKIP_WIKI_UPLOAD=1 for emergency degradation"
+  exit 1
+else
+  mkdir -p "$(dirname "$WIKI_META")"
+  EXISTING_DOC_ID=""
+  EXISTING_SHA=""
+  EXISTING_URL=""
+  if [ -f "$WIKI_META" ]; then
+    EXISTING_DOC_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).wiki_doc_id||'')")
+    EXISTING_SHA=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).uploaded_spec_sha||'')")
+    EXISTING_URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).wiki_url||'')")
+  fi
+
+  # Fast path: sha unchanged → reuse existing URL
+  if [ -n "$EXISTING_DOC_ID" ] && [ "$EXISTING_SHA" = "$CURRENT_SHA" ]; then
+    WIKI_URL="$EXISTING_URL"
+    echo "✓ wiki content unchanged (sha $CURRENT_SHA); reusing $WIKI_URL"
+  else
+    # Upload via lark-cli (lark-doc skill). --as user (wiki write perms).
+    if [ -z "$EXISTING_DOC_ID" ]; then
+      # CREATE
+      UPLOAD_RESULT=$(lark-cli --as user docs create-from-md \
+        --params "$(jq -nc --arg path "$SPEC" --arg parent "$WIKI_NODE" --arg title "spec: $CHANGE_ID" \
+                    '{markdown_path:$path, parent_wiki_token:$parent, title:$title}')")
+    else
+      # UPDATE (same doc_id, overwrite)
+      UPLOAD_RESULT=$(lark-cli --as user docs update-from-md \
+        --params "$(jq -nc --arg path "$SPEC" --arg doc "$EXISTING_DOC_ID" \
+                    '{markdown_path:$path, doc_id:$doc, mode:"overwrite"}')")
+    fi
+    [ -n "$UPLOAD_RESULT" ] || { echo "✗ lark-cli returned empty result"; exit 1; }
+
+    WIKI_DOC_ID=$(echo "$UPLOAD_RESULT" | jq -r '.doc_id // .obj_token')
+    WIKI_URL=$(echo "$UPLOAD_RESULT"   | jq -r '.url')
+    [ -n "$WIKI_DOC_ID" ] && [ "$WIKI_DOC_ID" != "null" ] || { echo "✗ no doc_id in lark-cli response: $UPLOAD_RESULT"; exit 1; }
+
+    # Persist wiki-meta.json
+    node -e "
+      const fs = require('fs');
+      fs.writeFileSync('$WIKI_META', JSON.stringify({
+        wiki_doc_id: '$WIKI_DOC_ID',
+        wiki_url: '$WIKI_URL',
+        uploaded_at: new Date().toISOString(),
+        uploaded_spec_sha: '$CURRENT_SHA'
+      }, null, 2) + '\n');
+    "
+    echo "✓ wiki upload OK: $WIKI_URL (doc_id=$WIKI_DOC_ID)"
+  fi
+fi
+```
+
+**Failure modes**:
+
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| `FACIO_LARK_WIKI_NODE not set` | `.harness/config.env` 缺该 var | 添加；或 `SKIP_WIKI_UPLOAD=1` 紧急绕过 |
+| `lark-cli returned empty / no doc_id` | lark-cli 未安装 / 未 auth / API 拒绝 | 跑 `lark-cli auth login --as user`；查权限 |
+| wiki-meta.json 已存在但 doc_id 失效（远端被删） | 历史 wiki doc 被人手动删 | 删 wiki-meta.json 后重跑（会走 create path） |
+
 ## Step 4A · Build review_requested Lark Card Payload
 
 构造 interactive card v2.0 payload（结构参考 design spec 附录 A.1）：
@@ -234,7 +358,34 @@ echo "✓ PR: $PR_URL"
 ```bash
 DEADLINE=$(date -u -d "+2 weekdays" +"%Y-%m-%d" 2>/dev/null || date -v+2d +"%Y-%m-%d")
 
-# Owner open_ids already extracted in Step 2 (PM_OPEN_ID / DESIGNER_OPEN_ID / ENG_OPEN_ID)
+# Owner open_ids + display names already resolved in Step 2 (via role-bindings.yaml)
+# WIKI_URL resolved in Step 3.5A (empty when SKIP_WIKI_UPLOAD=1 → degrade to PR-only button)
+
+# Build the actions array — conditionally prepend "阅读 Spec" button when WIKI_URL exists.
+if [ -n "$WIKI_URL" ]; then
+  ACTIONS_JSON=$(cat <<BUTTONS
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "📄 阅读 Spec" },
+          "type": "default",
+          "url": "$WIKI_URL"
+        },
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "✍️ 在 PR 上批准" },
+          "type": "primary",
+          "url": "$PR_URL"
+        }
+BUTTONS
+)
+else
+  ACTIONS_JSON=$(cat <<BUTTONS
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "✍️ 在 PR 上批准" },
+          "type": "primary",
+          "url": "$PR_URL"
+        }
+BUTTONS
+)
+fi
 
 # Card JSON (本 skill 由 AI 构造完整 JSON 字串传给 notify_spec_event)
 LARK_CARD=$(cat <<EOF
@@ -252,18 +403,14 @@ LARK_CARD=$(cat <<EOF
     },
     { "tag": "div",
       "text": { "tag": "lark_md",
-        "content": "**Reviewers**\n- PM: <at id=\"$PM_OPEN_ID\">@PM</at>\n- Designer: <at id=\"$DESIGNER_OPEN_ID\">@Designer</at>\n- Engineer: <at id=\"$ENG_OPEN_ID\">@Engineer</at>"
+        "content": "**Reviewers**\n- PM: <at id=\"$PM_OPEN_ID\">@$PM_NAME</at>\n- Designer: <at id=\"$DESIGNER_OPEN_ID\">@$DESIGNER_NAME</at>\n- Engineer: <at id=\"$ENG_OPEN_ID\">@$ENG_NAME</at>"
       }
     },
     { "tag": "div", "text": { "tag": "lark_md", "content": "**Deadline**: $DEADLINE" }},
     { "tag": "hr" },
     { "tag": "action",
       "actions": [
-        { "tag": "button",
-          "text": { "tag": "plain_text", "content": "📖 View PR & Review" },
-          "type": "primary",
-          "url": "$PR_URL"
-        }
+$ACTIONS_JSON
       ]
     },
     { "tag": "note",
@@ -303,8 +450,11 @@ mcp__facio-flow__notify_spec_event({
 
 ```bash
 echo "✓ Spec PR opened and review broadcast dispatched"
-echo "  PR: $PR_URL"
-echo "  Reviewers will be notified in Lark"
+echo "  PR:   $PR_URL"
+if [ -n "$WIKI_URL" ]; then
+  echo "  Wiki: $WIKI_URL"
+fi
+echo "  Reviewers will be notified in Lark with: 📄 阅读 Spec + ✍️ 在 PR 上批准"
 echo ""
 echo "Next: come back after 3 approvals are collected on the PR."
 echo "Resume by running spec-ratifier again — it will auto-detect resume mode."
