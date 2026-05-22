@@ -341,7 +341,34 @@ fi
 ```bash
 DEADLINE=$(date -u -d "+2 weekdays" +"%Y-%m-%d" 2>/dev/null || date -v+2d +"%Y-%m-%d")
 
-# Owner open_ids already extracted in Step 2 (PM_OPEN_ID / DESIGNER_OPEN_ID / ENG_OPEN_ID)
+# Owner open_ids + display names already resolved in Step 2 (via role-bindings.yaml)
+# WIKI_URL resolved in Step 3.5A (empty when SKIP_WIKI_UPLOAD=1 → degrade to PR-only button)
+
+# Build the actions array — conditionally prepend "阅读 Spec" button when WIKI_URL exists.
+if [ -n "$WIKI_URL" ]; then
+  ACTIONS_JSON=$(cat <<BUTTONS
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "📄 阅读 Spec" },
+          "type": "default",
+          "url": "$WIKI_URL"
+        },
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "✍️ 在 PR 上批准" },
+          "type": "primary",
+          "url": "$PR_URL"
+        }
+BUTTONS
+)
+else
+  ACTIONS_JSON=$(cat <<BUTTONS
+        { "tag": "button",
+          "text": { "tag": "plain_text", "content": "✍️ 在 PR 上批准" },
+          "type": "primary",
+          "url": "$PR_URL"
+        }
+BUTTONS
+)
+fi
 
 # Card JSON (本 skill 由 AI 构造完整 JSON 字串传给 notify_spec_event)
 LARK_CARD=$(cat <<EOF
@@ -359,18 +386,14 @@ LARK_CARD=$(cat <<EOF
     },
     { "tag": "div",
       "text": { "tag": "lark_md",
-        "content": "**Reviewers**\n- PM: <at id=\"$PM_OPEN_ID\">@PM</at>\n- Designer: <at id=\"$DESIGNER_OPEN_ID\">@Designer</at>\n- Engineer: <at id=\"$ENG_OPEN_ID\">@Engineer</at>"
+        "content": "**Reviewers**\n- PM: <at id=\"$PM_OPEN_ID\">@$PM_NAME</at>\n- Designer: <at id=\"$DESIGNER_OPEN_ID\">@$DESIGNER_NAME</at>\n- Engineer: <at id=\"$ENG_OPEN_ID\">@$ENG_NAME</at>"
       }
     },
     { "tag": "div", "text": { "tag": "lark_md", "content": "**Deadline**: $DEADLINE" }},
     { "tag": "hr" },
     { "tag": "action",
       "actions": [
-        { "tag": "button",
-          "text": { "tag": "plain_text", "content": "📖 View PR & Review" },
-          "type": "primary",
-          "url": "$PR_URL"
-        }
+$ACTIONS_JSON
       ]
     },
     { "tag": "note",
