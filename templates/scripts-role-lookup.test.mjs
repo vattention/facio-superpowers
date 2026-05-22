@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { lookupByGithubLogin, loadRoleBindings } from './scripts-role-lookup.mjs';
@@ -69,13 +70,12 @@ test('lookupByGithubLogin: user without github_login skipped silently', () => {
   });
 });
 
-test('CLI mode: prints "id\\tname" on hit, exit 0', async () => {
+test('CLI mode: prints "id\\tname" on hit, exit 0', () => {
   withTempYaml(`users:
   - id: ou_xyz
     name: Test
     github_login: testlogin
-`, async (file) => {
-    const { execFileSync } = await import('node:child_process');
+`, (file) => {
     const out = execFileSync('node', [
       new URL('./scripts-role-lookup.mjs', import.meta.url).pathname,
       file,
