@@ -259,6 +259,81 @@ fi
 echo "✓ PR: $PR_URL"
 ```
 
+## Step 3.5A · Active Mode: Upload spec.md to Lark Wiki
+
+`spec.md` 上传到 Lark Wiki，让非研发 reviewer 在飞书内原生渲染查看（避免读 GitHub PR Files-changed 视图的代码 diff）。
+
+**Idempotent re-run semantics**：第一次 create，后续 amendment 重跑同 doc_id update（URL 不变）；sha 一致时 skip。
+
+```bash
+WIKI_META=".harness/changes/$CHANGE_ID/wiki-meta.json"
+WIKI_NODE="${FACIO_LARK_WIKI_NODE:-}"
+
+if [ "${SKIP_WIKI_UPLOAD:-0}" = "1" ]; then
+  echo "⚠ --skip-wiki-upload set; skipping Lark Wiki upload (fallback to single PR-only button)"
+  WIKI_URL=""
+elif [ -z "$WIKI_NODE" ]; then
+  echo "✗ FACIO_LARK_WIKI_NODE not set in .harness/config.env"
+  echo "  Either set it (default: B7z5wY5lNiOCXhkRDAxcDfO3nPf for facio-blueprint)"
+  echo "  Or re-run with SKIP_WIKI_UPLOAD=1 for emergency degradation"
+  exit 1
+else
+  mkdir -p "$(dirname "$WIKI_META")"
+  EXISTING_DOC_ID=""
+  EXISTING_SHA=""
+  EXISTING_URL=""
+  if [ -f "$WIKI_META" ]; then
+    EXISTING_DOC_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).wiki_doc_id||'')")
+    EXISTING_SHA=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).uploaded_spec_sha||'')")
+    EXISTING_URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).wiki_url||'')")
+  fi
+
+  # Fast path: sha unchanged → reuse existing URL
+  if [ -n "$EXISTING_DOC_ID" ] && [ "$EXISTING_SHA" = "$CURRENT_SHA" ]; then
+    WIKI_URL="$EXISTING_URL"
+    echo "✓ wiki content unchanged (sha $CURRENT_SHA); reusing $WIKI_URL"
+  else
+    # Upload via lark-cli (lark-doc skill). --as user (wiki write perms).
+    if [ -z "$EXISTING_DOC_ID" ]; then
+      # CREATE
+      UPLOAD_RESULT=$(lark-cli --as user docs create-from-md \
+        --params "$(jq -nc --arg path "$SPEC" --arg parent "$WIKI_NODE" --arg title "spec: $CHANGE_ID" \
+                    '{markdown_path:$path, parent_wiki_token:$parent, title:$title}')")
+    else
+      # UPDATE (same doc_id, overwrite)
+      UPLOAD_RESULT=$(lark-cli --as user docs update-from-md \
+        --params "$(jq -nc --arg path "$SPEC" --arg doc "$EXISTING_DOC_ID" \
+                    '{markdown_path:$path, doc_id:$doc, mode:"overwrite"}')")
+    fi
+    [ -n "$UPLOAD_RESULT" ] || { echo "✗ lark-cli returned empty result"; exit 1; }
+
+    WIKI_DOC_ID=$(echo "$UPLOAD_RESULT" | jq -r '.doc_id // .obj_token')
+    WIKI_URL=$(echo "$UPLOAD_RESULT"   | jq -r '.url')
+    [ -n "$WIKI_DOC_ID" ] && [ "$WIKI_DOC_ID" != "null" ] || { echo "✗ no doc_id in lark-cli response: $UPLOAD_RESULT"; exit 1; }
+
+    # Persist wiki-meta.json
+    node -e "
+      const fs = require('fs');
+      fs.writeFileSync('$WIKI_META', JSON.stringify({
+        wiki_doc_id: '$WIKI_DOC_ID',
+        wiki_url: '$WIKI_URL',
+        uploaded_at: new Date().toISOString(),
+        uploaded_spec_sha: '$CURRENT_SHA'
+      }, null, 2) + '\n');
+    "
+    echo "✓ wiki upload OK: $WIKI_URL (doc_id=$WIKI_DOC_ID)"
+  fi
+fi
+```
+
+**Failure modes**:
+
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| `FACIO_LARK_WIKI_NODE not set` | `.harness/config.env` 缺该 var | 添加；或 `SKIP_WIKI_UPLOAD=1` 紧急绕过 |
+| `lark-cli returned empty / no doc_id` | lark-cli 未安装 / 未 auth / API 拒绝 | 跑 `lark-cli auth login --as user`；查权限 |
+| wiki-meta.json 已存在但 doc_id 失效（远端被删） | 历史 wiki doc 被人手动删 | 删 wiki-meta.json 后重跑（会走 create path） |
+
 ## Step 4A · Build review_requested Lark Card Payload
 
 构造 interactive card v2.0 payload（结构参考 design spec 附录 A.1）：
