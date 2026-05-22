@@ -433,8 +433,11 @@ mcp__facio-flow__notify_spec_event({
 
 ```bash
 echo "✓ Spec PR opened and review broadcast dispatched"
-echo "  PR: $PR_URL"
-echo "  Reviewers will be notified in Lark"
+echo "  PR:   $PR_URL"
+if [ -n "$WIKI_URL" ]; then
+  echo "  Wiki: $WIKI_URL"
+fi
+echo "  Reviewers will be notified in Lark with: 📄 阅读 Spec + ✍️ 在 PR 上批准"
 echo ""
 echo "Next: come back after 3 approvals are collected on the PR."
 echo "Resume by running spec-ratifier again — it will auto-detect resume mode."
