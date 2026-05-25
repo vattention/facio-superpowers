@@ -292,7 +292,10 @@ elif [ -z "${FACIO_SPEC_PREVIEW_BASE_URL:-}" ]; then
   exit 1
 else
   REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
-  PREVIEW_URL="${FACIO_SPEC_PREVIEW_BASE_URL}/${REPO_NAME}/${BRANCH}/${SPEC}"
+  # Preview-server returns whatever path is requested; we want the rendered .html,
+  # not the .md source. spec.html is committed alongside spec.md by spec-author Step 14.
+  SPEC_HTML="${SPEC%.md}.html"
+  PREVIEW_URL="${FACIO_SPEC_PREVIEW_BASE_URL}/${REPO_NAME}/${BRANCH}/${SPEC_HTML}"
   echo "✓ preview URL: $PREVIEW_URL"
 fi
 ```
