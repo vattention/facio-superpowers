@@ -1,3 +1,25 @@
+## v2.6.2 (2026-05-25)
+
+### Fix — spec-ratifier preview URL pointed to .md instead of .html
+
+`Step 3.5A` 用 `$SPEC`（.md 路径）构造 PREVIEW_URL，spec-preview-server 返回 markdown 源码（浏览器显示为纯文本），不是渲染版 HTML。
+
+修复：
+
+```bash
+SPEC_HTML="${SPEC%.md}.html"
+PREVIEW_URL="${FACIO_SPEC_PREVIEW_BASE_URL}/${REPO_NAME}/${BRANCH}/${SPEC_HTML}"
+```
+
+v2.6.0 verification 没抓住因为手测时直接敲 .html URL，从未跑过完整的 spec-ratifier → card → 点击链路。仅在卡片生成路径上发生。
+
+### BC 影响
+
+- 无；纯 bug fix。已部署 spec-preview-server 不受影响。
+- 消费方 `npx facio-superpowers@2.6.2 sync --force` —— SKILL.md 不通过 cli.js 安装到项目侧（skill 文件直接由 superpowers 仓托管），但本地 `~/.claude/skills/spec-ratifier/SKILL.md` 走 auto-sync 机制（每次 superpowers main 更新自动同步）。
+
+---
+
 ## v2.6.1 (2026-05-25)
 
 ### Polish — generator-v2 视觉细节修复
