@@ -37,7 +37,7 @@ spec-ratifier has two modes — auto-detect on entry:
   2. .harness/changes/<change_id>/self-review.md exists with `result: pass`
      and spec_sha matches sha256(spec.md)
   3. FACIO_LARK_WEBHOOK_URL set (via .harness/config.env or shell)
-  3a. FACIO_LARK_WIKI_NODE set (via .harness/config.env) OR SKIP_WIKI_UPLOAD=1
+  3a. FACIO_SPEC_PREVIEW_BASE_URL set (via .harness/config.env) OR SKIP_HTML_PREVIEW=1
   3b. .harness/role-bindings.yaml exists with entries matching frontmatter
       owners.{pm,designer,engineer} via github_login field
   4. `gh --version` available AND `gh auth status` passes (NEW in v2.4.0)
@@ -160,11 +160,11 @@ if [ -z "$FACIO_LARK_WEBHOOK_URL" ]; then
   exit 1
 fi
 
-# Validate FACIO_LARK_WIKI_NODE (or explicit skip)
-if [ "${SKIP_WIKI_UPLOAD:-0}" != "1" ] && [ -z "${FACIO_LARK_WIKI_NODE:-}" ]; then
-  echo "✗ FACIO_LARK_WIKI_NODE not set in .harness/config.env"
-  echo "  See spec 2026-05-22-spec-ratifier-lark-wiki-render §3 module 2 for default value"
-  echo "  Emergency: re-run with SKIP_WIKI_UPLOAD=1"
+# Validate FACIO_SPEC_PREVIEW_BASE_URL (or explicit skip)
+if [ "${SKIP_HTML_PREVIEW:-0}" != "1" ] && [ -z "${FACIO_SPEC_PREVIEW_BASE_URL:-}" ]; then
+  echo "✗ FACIO_SPEC_PREVIEW_BASE_URL not set in .harness/config.env"
+  echo "  Set to your internal preview host (e.g. https://harness-specs.<your-cf-domain>)"
+  echo "  Emergency: re-run with SKIP_HTML_PREVIEW=1"
   exit 1
 fi
 
@@ -174,7 +174,7 @@ if [ "$MODE" = "active" ]; then
   test -f "$ROLE_BINDINGS" || { echo "✗ $ROLE_BINDINGS missing — run init --harness"; exit 1; }
 fi
 
-echo "✓ common pre-check passed (mode=$MODE; wiki=${FACIO_LARK_WIKI_NODE:-SKIPPED})"
+echo "✓ common pre-check passed (mode=$MODE; preview=${FACIO_SPEC_PREVIEW_BASE_URL:-SKIPPED})"
 ```
 
 All-`✓` is the only valid entry condition for the chosen mode below.
@@ -276,70 +276,24 @@ fi
 echo "✓ PR: $PR_URL"
 ```
 
-## Step 3.5A · Active Mode: Upload spec.md to Lark Wiki
+## Step 3.5A · Active Mode: Construct Spec Preview URL
 
-`spec.md` 上传到 Lark Wiki，让非研发 reviewer 在飞书内原生渲染查看（避免读 GitHub PR Files-changed 视图的代码 diff）。
-
-**Idempotent re-run semantics**：第一次 create，后续 amendment 重跑同 doc_id update（URL 不变）；sha 一致时 skip。
+构造 spec.html 在内网 preview server 上的 URL，让非研发 reviewer 通过 Cloudflare Access (飞书 SSO) 访问渲染版。**不**调用任何外部 API（URL 是本地 string 构造）。
 
 ```bash
-WIKI_META=".harness/changes/$CHANGE_ID/wiki-meta.json"
-WIKI_NODE="${FACIO_LARK_WIKI_NODE:-}"
+PREVIEW_URL=""
 
-if [ "${SKIP_WIKI_UPLOAD:-0}" = "1" ]; then
-  echo "⚠ --skip-wiki-upload set; skipping Lark Wiki upload (fallback to single PR-only button)"
-  WIKI_URL=""
-elif [ -z "$WIKI_NODE" ]; then
-  echo "✗ FACIO_LARK_WIKI_NODE not set in .harness/config.env"
-  echo "  Either set it (default: B7z5wY5lNiOCXhkRDAxcDfO3nPf for facio-blueprint)"
-  echo "  Or re-run with SKIP_WIKI_UPLOAD=1 for emergency degradation"
+if [ "${SKIP_HTML_PREVIEW:-0}" = "1" ]; then
+  echo "⚠ SKIP_HTML_PREVIEW=1; skipping preview URL (card degrades to single PR button)"
+elif [ -z "${FACIO_SPEC_PREVIEW_BASE_URL:-}" ]; then
+  echo "✗ FACIO_SPEC_PREVIEW_BASE_URL not set in .harness/config.env"
+  echo "  Set to your internal preview host (e.g. https://harness-specs.<your-cf-domain>)"
+  echo "  Or run with SKIP_HTML_PREVIEW=1 for emergency degradation"
   exit 1
 else
-  mkdir -p "$(dirname "$WIKI_META")"
-  EXISTING_DOC_ID=""
-  EXISTING_SHA=""
-  EXISTING_URL=""
-  if [ -f "$WIKI_META" ]; then
-    EXISTING_DOC_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).wiki_doc_id||'')")
-    EXISTING_SHA=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).uploaded_spec_sha||'')")
-    EXISTING_URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$WIKI_META','utf8')).wiki_url||'')")
-  fi
-
-  # Fast path: sha unchanged → reuse existing URL
-  if [ -n "$EXISTING_DOC_ID" ] && [ "$EXISTING_SHA" = "$CURRENT_SHA" ]; then
-    WIKI_URL="$EXISTING_URL"
-    echo "✓ wiki content unchanged (sha $CURRENT_SHA); reusing $WIKI_URL"
-  else
-    # Upload via lark-cli (lark-doc skill). --as user (wiki write perms).
-    if [ -z "$EXISTING_DOC_ID" ]; then
-      # CREATE
-      UPLOAD_RESULT=$(lark-cli --as user docs create-from-md \
-        --params "$(jq -nc --arg path "$SPEC" --arg parent "$WIKI_NODE" --arg title "spec: $CHANGE_ID" \
-                    '{markdown_path:$path, parent_wiki_token:$parent, title:$title}')")
-    else
-      # UPDATE (same doc_id, overwrite)
-      UPLOAD_RESULT=$(lark-cli --as user docs update-from-md \
-        --params "$(jq -nc --arg path "$SPEC" --arg doc "$EXISTING_DOC_ID" \
-                    '{markdown_path:$path, doc_id:$doc, mode:"overwrite"}')")
-    fi
-    [ -n "$UPLOAD_RESULT" ] || { echo "✗ lark-cli returned empty result"; exit 1; }
-
-    WIKI_DOC_ID=$(echo "$UPLOAD_RESULT" | jq -r '.doc_id // .obj_token')
-    WIKI_URL=$(echo "$UPLOAD_RESULT"   | jq -r '.url')
-    [ -n "$WIKI_DOC_ID" ] && [ "$WIKI_DOC_ID" != "null" ] || { echo "✗ no doc_id in lark-cli response: $UPLOAD_RESULT"; exit 1; }
-
-    # Persist wiki-meta.json
-    node -e "
-      const fs = require('fs');
-      fs.writeFileSync('$WIKI_META', JSON.stringify({
-        wiki_doc_id: '$WIKI_DOC_ID',
-        wiki_url: '$WIKI_URL',
-        uploaded_at: new Date().toISOString(),
-        uploaded_spec_sha: '$CURRENT_SHA'
-      }, null, 2) + '\n');
-    "
-    echo "✓ wiki upload OK: $WIKI_URL (doc_id=$WIKI_DOC_ID)"
-  fi
+  REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+  PREVIEW_URL="${FACIO_SPEC_PREVIEW_BASE_URL}/${REPO_NAME}/${BRANCH}/${SPEC}"
+  echo "✓ preview URL: $PREVIEW_URL"
 fi
 ```
 
@@ -347,9 +301,11 @@ fi
 
 | Symptom | Cause | Action |
 |---------|-------|--------|
-| `FACIO_LARK_WIKI_NODE not set` | `.harness/config.env` 缺该 var | 添加；或 `SKIP_WIKI_UPLOAD=1` 紧急绕过 |
-| `lark-cli returned empty / no doc_id` | lark-cli 未安装 / 未 auth / API 拒绝 | 跑 `lark-cli auth login --as user`；查权限 |
-| wiki-meta.json 已存在但 doc_id 失效（远端被删） | 历史 wiki doc 被人手动删 | 删 wiki-meta.json 后重跑（会走 create path） |
+| `FACIO_SPEC_PREVIEW_BASE_URL not set` | `.harness/config.env` 缺该 var | 添加；或 `SKIP_HTML_PREVIEW=1` 紧急绕过 |
+| reviewer 点 preview URL 拿到 502/404 | spec-preview-server 未起，或 branch 尚未 push | 检查 EC2 service 状态；确认 Step 3A 已 push branch |
+| reviewer 点 preview URL 跳 SSO 后还 404 | spec.html 不在该 branch（spec-author Step 14 未跑） | 回 spec-author Step 14 生成 spec.html + 重 commit |
+
+**Note**: spec.html 由 spec-author Step 14 生成，Step 3A 的 git push 已推到 PR 分支；preview server 通过 `git show origin/<branch>:<path>` 拿到。无任何外部上传。
 
 ## Step 4A · Build review_requested Lark Card Payload
 
@@ -359,15 +315,15 @@ fi
 DEADLINE=$(date -u -d "+2 weekdays" +"%Y-%m-%d" 2>/dev/null || date -v+2d +"%Y-%m-%d")
 
 # Owner open_ids + display names already resolved in Step 2 (via role-bindings.yaml)
-# WIKI_URL resolved in Step 3.5A (empty when SKIP_WIKI_UPLOAD=1 → degrade to PR-only button)
+# PREVIEW_URL resolved in Step 3.5A (empty when SKIP_HTML_PREVIEW=1 → degrade to PR-only button)
 
-# Build the actions array — conditionally prepend "阅读 Spec" button when WIKI_URL exists.
-if [ -n "$WIKI_URL" ]; then
+# Build the actions array — conditionally prepend "阅读 Spec" button when PREVIEW_URL exists.
+if [ -n "$PREVIEW_URL" ]; then
   ACTIONS_JSON=$(cat <<BUTTONS
         { "tag": "button",
           "text": { "tag": "plain_text", "content": "📄 阅读 Spec" },
           "type": "default",
-          "url": "$WIKI_URL"
+          "url": "$PREVIEW_URL"
         },
         { "tag": "button",
           "text": { "tag": "plain_text", "content": "✍️ 在 PR 上批准" },
@@ -451,8 +407,8 @@ mcp__facio-flow__notify_spec_event({
 ```bash
 echo "✓ Spec PR opened and review broadcast dispatched"
 echo "  PR:   $PR_URL"
-if [ -n "$WIKI_URL" ]; then
-  echo "  Wiki: $WIKI_URL"
+if [ -n "$PREVIEW_URL" ]; then
+  echo "  Preview: $PREVIEW_URL"
 fi
 echo "  Reviewers will be notified in Lark with: 📄 阅读 Spec + ✍️ 在 PR 上批准"
 echo ""

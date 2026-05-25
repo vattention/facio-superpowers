@@ -8,10 +8,24 @@
   },
   "scripts": {
     "test": "node tests/harness-merge/test.js",
+    "test:generator": "node --test src/generate-spec-html/*.test.mjs",
+    "test:server": "node --test services/spec-preview-server/*.test.mjs",
+    "build:generator": "node scripts/build-generator.mjs",
     "version:patch": "npm version patch -m 'chore: bump version to %s'",
     "version:minor": "npm version minor -m 'chore: bump version to %s'",
     "version:major": "npm version major -m 'chore: bump version to %s'",
+    "prepublishOnly": "npm run build:generator",
     "release": "git push && git push --tags"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.0.0",
+    "markdown-it-attrs": "^4.3.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "shiki": "^1.22.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
   },
   "keywords": [
     "claude-code",

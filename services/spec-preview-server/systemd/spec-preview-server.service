@@ -1,0 +1,30 @@
+[Unit]
+Description=Spec Preview Server (internal, Cloudflare-tunneled)
+After=network.target
+
+[Service]
+Type=simple
+User=specs
+WorkingDirectory=/opt/spec-preview-server
+ExecStart=/usr/bin/node /opt/spec-preview-server/server.mjs
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spec-preview-server
+
+# Environment (override in /etc/spec-preview-server.env if needed)
+Environment=PORT=8080
+Environment=FETCH_INTERVAL_MS=30000
+Environment=CACHE_TTL_MS=5000
+EnvironmentFile=-/etc/spec-preview-server.env
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/specs
+
+[Install]
+WantedBy=multi-user.target
