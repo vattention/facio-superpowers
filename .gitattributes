@@ -16,3 +16,9 @@ hooks/session-start text eol=lf
 *.png binary
 *.jpg binary
 *.gif binary
+
+# Generated bundle (esbuild output) — collapse in GitHub diff view + skip linguist stats
+templates/scripts-generate-spec-html.mjs linguist-generated=true
+
+# Vendored third-party assets (mermaid.js UMD) — collapse + skip stats
+vendor/mermaid.min.js linguist-vendored=true
