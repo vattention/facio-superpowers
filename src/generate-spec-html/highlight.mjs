@@ -29,11 +29,18 @@ export async function createHighlight() {
   return function highlight(code, lang) {
     if (lang === 'mermaid') return '';
     const resolvedLang = LANGS.includes(lang) ? lang : 'plaintext';
+    const displayLang = lang || 'text';
     try {
-      return hl.codeToHtml(code, { lang: resolvedLang, theme: THEME });
+      const inner = hl.codeToHtml(code, { lang: resolvedLang, theme: THEME });
+      // v2.6.1: wrap with .code-block so CSS can render a lang chip via data-lang
+      return `<div class="code-block" data-lang="${escapeAttr(displayLang)}">${inner}</div>`;
     } catch {
       const escaped = code.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-      return `<pre><code>${escaped}</code></pre>`;
+      return `<div class="code-block" data-lang="${escapeAttr(displayLang)}"><pre><code>${escaped}</code></pre></div>`;
     }
   };
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }

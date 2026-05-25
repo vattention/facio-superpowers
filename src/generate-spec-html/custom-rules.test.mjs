@@ -56,3 +56,24 @@ test('§ tag prefix gets visual badge', async () => {
   assert.match(html, /class="tag"/);
   assert.match(html, /§1/);
 });
+
+// v2.6.1: empty "none" markers in §5 should NOT get colored diff box
+test('§5 ADDED with just "无" → .diff-none (muted, not green box)', async () => {
+  const md = await createParser();
+  const html = md.render('## §5 L1 Impact\n\n### ADDED Requirements\n\n- 无');
+  assert.match(html, /class="diff-none"/);
+  assert.doesNotMatch(html, /class="diff-added">\s*无\s*<\/li>/);
+});
+
+test('§5 REMOVED with "None" → .diff-none', async () => {
+  const md = await createParser();
+  const html = md.render('## §5 L1 Impact\n\n### REMOVED Requirements\n\n- None');
+  assert.match(html, /class="diff-none"/);
+});
+
+test('§5 MODIFIED with real content → still gets .diff-modified', async () => {
+  const md = await createParser();
+  const html = md.render('## §5 L1 Impact\n\n### MODIFIED Requirements\n\n- "old" → "new"');
+  assert.match(html, /class="diff-modified"/);
+  assert.doesNotMatch(html, /class="diff-none"/);
+});
