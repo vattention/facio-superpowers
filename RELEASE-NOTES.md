@@ -1,3 +1,38 @@
+## v2.6.0 (2026-05-25)
+
+### Changed — `spec-ratifier` 渲染层重写 + 内网 preview server + 删除 Lark wiki 路径
+
+实施 spec `facio-blueprint/docs/superpowers/specs/2026-05-25-spec-html-generator-v2-and-preview-server.md`。修复 v2.5.0 实证暴露的两个核心问题：spec.html 渲染质量（手写 parser 不支持嵌套结构 + mermaid 不渲染）+ Lark wiki upload 链路全错（lark-cli 语法 bug）。
+
+### 主要变化
+
+- **`generate-spec-html.mjs` v2 重写**：336 行手写 markdown parser → markdown-it 14 + 插件（anchor / attrs / task-lists / GFM）+ shiki 1.22 light-plus 语法高亮 + mermaid 11.3.0 UMD 运行时渲染。esbuild bundle 成单个 9.4MB 文件，consumer 项目仍 zero npm install。
+- **NEW `services/spec-preview-server/`**：内网 HTTP 服务，通过 Cloudflare Tunnel + Cloudflare Access (飞书 SSO) 暴露；按 `<repo>/<branch>/<path>` URL 把 spec.html serving 给经过鉴权的 reviewer。包含 systemd unit / install.sh / 部署 runbook（见 services/spec-preview-server/README.md）。
+- **`spec-ratifier` Step 3.5A 完全重写**：从 lark-cli docs upload（有 bug）→ ~10 行本地 URL 构造。删除依赖：lark-doc skill / wiki-meta.json / FACIO_LARK_WIKI_NODE。
+- **保留 v1 视觉约定**：§5 ADDED/MODIFIED/REMOVED 三色 / AC 蓝卡片 / §4§7 折叠 / status badge —— 通过 markdown-it 自定义 renderer rules 保留。
+- **`vendor/mermaid.min.js`**：pinned 11.3.0，bundled 进 spec.html（~2.5MB inline）；不走 CDN，离线打开仍可渲染图。
+
+### 依赖配套
+
+- **消费方必改 `.harness/config.env`**：删 `FACIO_LARK_WIKI_NODE`，加 `FACIO_SPEC_PREVIEW_BASE_URL=https://harness-specs.<your-cf-domain>`（或 `SKIP_HTML_PREVIEW=1` 紧急绕过）
+- **新基建依赖**：EC2 + cloudflared daemon + Cloudflare Access policy (飞书 SSO) —— runbook 见 `services/spec-preview-server/README.md`
+- **新 npm deps（仅 superpowers 自身，consumer 不受影响）**：markdown-it@14 / shiki@1 / markdown-it-anchor / markdown-it-attrs / markdown-it-task-lists / esbuild@0.24 (devDep)
+- 不再依赖 lark-doc skill / lark-cli（for spec-ratifier 用途；其它 skill 不受影响）
+
+### BC 影响
+
+- ⚠️ 旧 `.harness/changes/*/wiki-meta.json` 文件孤立无用，可安全删除
+- ⚠️ spec.html 现需要 JS-capable 浏览器渲染 mermaid（v1 是纯 text fallback）
+- ⚠️ 项目侧 `npx facio-superpowers sync --force` 安装 `scripts/role-lookup.mjs`（v2.5.0 既有）+ `scripts/generate-spec-html.mjs`（v2 重写，9.4MB）+ `scripts/vendor-mermaid.min.js`（NEW，2.5MB）
+
+### Test coverage
+
+- generator 单测 23/23 PASS（parser / highlight / mermaid / custom-rules / index integration）
+- server 单测 9/9 PASS（parseRequest + safeComponent）
+- bundle smoke test：clean dir + `cli sync --force` → 渲染 fixture spec → shiki 高亮 + mermaid 块 + diff colors 全 ✓
+
+---
+
 ## v2.5.0 (2026-05-22)
 
 ### Changed — `spec-ratifier` Lark Wiki render button + owner identity lookup
