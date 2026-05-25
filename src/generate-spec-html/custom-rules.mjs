@@ -79,11 +79,15 @@ export function installCustomRules(md) {
   // list_item_open: apply diff classes in §5; AC card classes anywhere
   md.renderer.rules.list_item_open = function (tokens, idx, options, env, self) {
     const st = getState(env);
-    // Look ahead for AC pattern in inline content
     const inlineTok = tokens.slice(idx + 1, idx + 5).find(t => t.type === 'inline');
     const inlineContent = inlineTok?.content || '';
 
     if (st.section === '§5' && st.h3) {
+      // v2.6.1: suppress colored diff box when content is just a "none" marker —
+      // avoids the "empty colored box looks like real content" UX trap.
+      if (isNoneMarker(inlineContent)) {
+        return `<li class="diff-none">`;
+      }
       let cls = 'diff-neutral';
       if (/ADDED/i.test(st.h3)) cls = 'diff-added';
       else if (/MODIFIED/i.test(st.h3)) cls = 'diff-modified';
@@ -95,6 +99,13 @@ export function installCustomRules(md) {
     }
     return defaultRender(tokens, idx, options, env, self);
   };
+}
+
+// Detect "no content" markers used in spec sections that are otherwise empty.
+// Covers Chinese / English / N/A short forms.
+function isNoneMarker(text) {
+  const normalized = (text || '').trim().replace(/[（）()]/g, '');
+  return /^(无|空|none|n\/a|na)\.?$/i.test(normalized);
 }
 
 function escapeHtml(s) {

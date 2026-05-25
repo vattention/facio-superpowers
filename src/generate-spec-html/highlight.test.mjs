@@ -7,9 +7,10 @@ test('highlight: returns a function', async () => {
   assert.equal(typeof fn, 'function');
 });
 
-test('highlight: bash code → shiki spans', async () => {
+test('highlight: bash code → shiki spans wrapped in .code-block with data-lang', async () => {
   const fn = await createHighlight();
   const html = fn('echo "hello"', 'bash');
+  assert.match(html, /<div class="code-block" data-lang="bash">/);
   assert.match(html, /<pre[^>]*class="[^"]*shiki/);
   assert.match(html, /style="color:#/);
 });
