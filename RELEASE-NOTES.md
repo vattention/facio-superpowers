@@ -1,3 +1,26 @@
+## v2.6.1 (2026-05-25)
+
+### Polish — generator-v2 视觉细节修复
+
+纯样式 patch，无行为变更。基于 v2.6.0 内网部署后的实证反馈。
+
+### 改动
+
+- **空 diff 抑制**：§5 列表项内容仅为 `无` / `None` / `n/a` 时不再渲染空彩色盒子；改为灰色斜体 `— 无`。修复"reviewer 误以为空盒子是真 ADDED/MODIFIED/REMOVED 内容"的 UX trap
+- **代码块语言标签**：shiki 输出包了 `<div class="code-block" data-lang="json">`，CSS `::before` 在右上角显示大写语言名（JSON/BASH/MERMAID/etc）。长 spec 多代码块时一眼可扫
+- **TOC sidebar**：客户端 JS 自动扫描 h2/h3 with id，在桌面宽屏（≥1280px）左侧固定显示导航；IntersectionObserver 滚动时高亮当前章节；移动端隐藏
+- **Inline code 对比度**：AC 蓝卡片 / §5 三色 diff 背景上的 `code` span 改用 rgba 白底，更易读
+
+### Test 覆盖
+
+- 单测 26/26 PASS（+3 新 `.diff-none` 用例，+1 修改 shiki wrapper 断言）
+
+### BC 影响
+
+- 无 BC break；消费方升级 `npx facio-superpowers@2.6.1 sync --force` 即可获得新渲染
+
+---
+
 ## v2.6.0 (2026-05-25)
 
 ### Changed — `spec-ratifier` 渲染层重写 + 内网 preview server + 删除 Lark wiki 路径
