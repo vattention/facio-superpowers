@@ -118,6 +118,54 @@ Development complete. Before committing, I recommend:
 Would you like me to call /verification-before-completion now? (yes/no)
 ```
 
+## 飞书群同步（接入步骤）
+
+flow skill 在两个关键节点会主动询问是否将 spec 同步到飞书群：
+
+| 时机 | 行为 |
+|------|------|
+| `decide_context` 之后 | 创建一份新的飞书文档，把决策点 + 验收标准推到「facio 需求同步」群 |
+| `close_context` 之后 | 整篇覆盖**同一份**飞书文档（1 context = 1 doc 迭代），把最终方案 + 验证结果推到群 |
+
+用户每次都可以拒绝；拒绝即跳过、不追问。
+
+### 一次性接入（≤2 分钟）
+
+```bash
+# 1) 在 ~/.zshrc 或 ~/.bashrc 加一行
+export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<your-hook-id>"
+
+# 2) 飞书 OAuth 认证（一次性）
+npx @larksuite/cli auth login
+
+# 3) source 或重开终端
+source ~/.zshrc
+
+# 4) 拉最新 skills
+npx @vattention/facio-superpowers sync
+```
+
+跑一次 `npx @larksuite/cli doctor` 应看到 `token_exists: pass`，下次走 flow 工作流到 decide/close 时 skill 就会主动询问。
+
+### Webhook URL 从哪拿？
+
+向团队管理员索取「facio 需求同步」总群的飞书群机器人 webhook URL。每位同事用同一个 URL（消息发到同一个群），不会冲突。
+
+### 多产品路由（选填）
+
+如果未来要按 product 发到不同群：
+
+```bash
+# product 名小写 + 连字符转下划线 + 全大写
+export FEISHU_WEBHOOK_VIDEO_EDITOR="https://.../hook/aaaaa"
+export FEISHU_WEBHOOK_BINN="https://.../hook/bbbbb"
+# 脚本会优先用产品级，缺失则 fall back 到 FEISHU_WEBHOOK_URL
+```
+
+### 安全提示
+
+webhook URL 是「弱 token」— 拿到就能往群里发消息。**绝不要把 URL 提交到任何 git 仓库**，包括 facio-superpowers 本身（这是 PUBLIC 公开仓库）。如果担心 URL 暴露，可在群机器人设置里启用「自定义关键词」限制。
+
 ## Skills 一览
 
 Facio Superpowers 包含 16 个 skills：
