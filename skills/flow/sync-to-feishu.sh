@@ -98,11 +98,22 @@ fi
 
 # -------- lark-cli 认证检查 --------
 TOKEN_STATUS="$(
-  $LARK_CLI doctor --jq '.checks[] | select(.name=="token_exists") | .status' 2>/dev/null \
-    | tr -d '"' || true
+  $LARK_CLI doctor 2>/dev/null \
+    | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+    for c in d.get("checks", []):
+        if c.get("name") == "token_exists":
+            print(c.get("status", "unknown"))
+            break
+    else:
+        print("unknown")
+except Exception:
+    print("unknown")' \
+    || echo "unknown"
 )"
 if [[ "$TOKEN_STATUS" != "pass" ]]; then
-  echo "lark-cli 认证未通过（token_exists=$TOKEN_STATUS）。请运行：npx @larksuite/cli auth login" >&2
+  echo "lark-cli 认证未通过（token_exists=${TOKEN_STATUS}）。请运行：npx @larksuite/cli auth login" >&2
   exit 6
 fi
 
@@ -141,14 +152,19 @@ json.loads(candidate)
 sys.stdout.write(candidate)'
 )" || { echo "无法从 lark-cli 输出里提取 JSON：$DOC_STDOUT" >&2; exit 4; }
 
-read -r RESOLVED_DOC_URL RESOLVED_DOC_ID < <(
+# 分两行输出 + 分别读取（避免 read 把空 leading 字段吃掉）
+RESOLVED_DOC_URL="$(
   printf '%s' "$DOC_JSON" | python3 -c 'import json,sys
 d=json.load(sys.stdin)
 data=d.get("data",{})
-doc_url = data.get("doc_url") or data.get("url") or ""
-doc_id  = data.get("doc_id")  or data.get("document_id") or data.get("doc_token") or ""
-print(doc_url, doc_id)'
-)
+print(data.get("doc_url") or data.get("url") or "")'
+)"
+RESOLVED_DOC_ID="$(
+  printf '%s' "$DOC_JSON" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+data=d.get("data",{})
+print(data.get("doc_id") or data.get("document_id") or data.get("doc_token") or "")'
+)"
 
 # decide 阶段服务端返回 doc_url；close +update 的响应可能没有 doc_url（不同 API 版本不一致）
 # 没拿到就回退用入参 DOC_ID + 拼链接
