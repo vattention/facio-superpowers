@@ -12,6 +12,17 @@ export function buildAppJwt({ appId, privateKeyPem, now = Math.floor(Date.now() 
   return `${header}.${payload}.${sig}`;
 }
 
+// Builds a token-injected git HTTPS clone URL. WARNING: output embeds the
+// installation token in cleartext — callers must NEVER log the return value.
+export function buildCloneUrl({ org, repo, token }) {
+  return `https://x-access-token:${token}@github.com/${org}/${repo}.git`;
+}
+
+// Rejects injection / path-traversal chars before a repo name is used in a clone.
+export function isValidRepoName(name) {
+  return typeof name === 'string' && /^[A-Za-z0-9._-]{1,100}$/.test(name) && name !== '.' && name !== '..';
+}
+
 export function createTokenProvider({ appId, privateKeyPem, installationId, fetchImpl = fetch, now = () => Math.floor(Date.now() / 1000) }) {
   let cached = null; // { token, expSec }
   let inflight = null;

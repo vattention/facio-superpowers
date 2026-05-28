@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
-import { buildAppJwt, createTokenProvider } from './github-app.mjs';
+import { buildAppJwt, createTokenProvider, buildCloneUrl, isValidRepoName } from './github-app.mjs';
 
 const PEM = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs1', format: 'pem' });
 
@@ -65,4 +65,20 @@ test('createTokenProvider: malformed mint response throws (not cached)', async (
   const fetchImpl = async () => ({ ok: true, status: 201, json: async () => ({ token: 'x' /* no expires_at */ }) });
   const provider = createTokenProvider({ appId: '1', privateKeyPem: PEM, installationId: '99', fetchImpl });
   await assert.rejects(() => provider.getToken(), /malformed/);
+});
+
+test('buildCloneUrl: token-injected https url', () => {
+  assert.equal(
+    buildCloneUrl({ org: 'vattention', repo: 'facio-blueprint', token: 'tok' }),
+    'https://x-access-token:tok@github.com/vattention/facio-blueprint.git',
+  );
+});
+
+test('isValidRepoName: rejects injection / path chars', () => {
+  assert.equal(isValidRepoName('facio-blueprint'), true);
+  assert.equal(isValidRepoName('repo.name_2'), true);
+  assert.equal(isValidRepoName('../etc'), false);
+  assert.equal(isValidRepoName('a/b'), false);
+  assert.equal(isValidRepoName(''), false);
+  assert.equal(isValidRepoName('x'.repeat(101)), false);
 });
