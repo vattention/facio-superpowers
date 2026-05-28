@@ -1,6 +1,6 @@
 {
   "name": "@vattention/facio-superpowers",
-  "version": "2.6.2",
+  "version": "2.7.0",
   "description": "Documentation management for AI-assisted development with Claude Code and Cursor",
   "main": "cli.js",
   "bin": {

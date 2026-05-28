@@ -1,3 +1,39 @@
+## v2.7.0 (2026-05-28)
+
+### Added — `spec-preview-server` 持久链接 + 全组织零配置 on-demand clone
+
+扩展内网 spec.html preview server，修复内部 preview 链路的两个核心痛点。
+
+### 主要变化
+
+- **持久链接（default-branch fallback）**：preview URL 内嵌 PR 分支；分支 merge + 删除后旧链接会 410。现在 server 在分支不存在时回退到仓库的默认分支，同一条链接在 merge 后仍可用（展示已合入的 spec.html）。
+- **全组织零配置（on-demand clone via GitHub App）**：此前每个 repo 需手动 onboard（SSH deploy key + clone + `SPEC_PREVIEW_REPOS` 环境变量 + 重启）。现在 server 用 GitHub App installation token（`contents:read`）按需 clone 任意 `vattention` 组织下的 repo。`SPEC_PREVIEW_REPOS` 降级为可选的预热（pre-seed）。
+
+### 实现 / 部署改动
+
+- **NEW `github-app.mjs`**：RS256 JWT + installation-token provider，仅用 `node:crypto`，零新增 npm 依赖。
+- **NEW `provision.mjs`**：on-demand clone + in-flight 去重（同一 repo 并发请求只 clone 一次）。
+- **NEW `git-show.mjs`**：default-branch fallback 状态机。
+- **NEW `error-page.mjs`**：友好的 404 / 410 / 503 HTML 错误页。
+- **`server.mjs` 重构**：拆为 import-pure，handler 接线到上述新模块。
+- **`install.sh` 改为 flag 驱动**：`--org / --app-id / --installation-id / --private-key / [--preseed]`；App 私钥存储于 `/etc/spec-preview-server.key`，systemd unit 增加 `ReadOnlyPaths` 以挂载该密钥。
+
+### Test 覆盖
+
+- ~57 单测 + 13 集成测试全部 PASS，零新增 npm 依赖。
+
+### BC 影响 / 迁移
+
+spec tier = Large（引入组织级读凭证）。已部署的 spec-preview-server 必须迁移：
+
+1. 在 `vattention` 组织上创建并安装一个 GitHub App，授予 `contents:read` 权限。
+2. 用新的 flag 重新跑 `install.sh`（带 App 参数）—— **旧的 per-repo deploy-key 模型已移除**。
+3. `SPEC_PREVIEW_REPOS` 现在是可选的预热项，不再是 onboarding 的必要步骤。
+
+消费方（spec-ratifier 链路）无需改动；preview URL 构造不变。
+
+---
+
 ## v2.6.2 (2026-05-25)
 
 ### Fix — spec-ratifier preview URL pointed to .md instead of .html
