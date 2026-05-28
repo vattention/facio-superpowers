@@ -13,7 +13,8 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=spec-preview-server
 
-# Environment (override in /etc/spec-preview-server.env if needed)
+# Default env (PORT/FETCH/TTL). GITHUB_ORG / GITHUB_APP_* + key path come from
+# the EnvironmentFile (written by deploy/install.sh) which overrides these.
 Environment=PORT=8080
 Environment=FETCH_INTERVAL_MS=30000
 Environment=CACHE_TTL_MS=5000
@@ -24,7 +25,11 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+# RW clone cache (repos cloned on demand here).
 ReadWritePaths=/var/lib/specs
+# GitHub App private key lives OUTSIDE the RW cache; make it readable under
+# ProtectSystem=strict.
+ReadOnlyPaths=/etc/spec-preview-server.key
 
 [Install]
 WantedBy=multi-user.target
