@@ -22,10 +22,17 @@
 #       [--product <context.product>] \
 #       [--summary "<一句话>"]
 #
-# 配置：
-#   FEISHU_WEBHOOK_URL                必填，默认 webhook
-#   FEISHU_WEBHOOK_<PRODUCT_UPPER>    选填，按 product 路由覆盖默认值
-#   （product 名小写连字符 → 大写下划线，e.g. video-editor → VIDEO_EDITOR）
+# 配置（webhook URL 解析顺序，file-wins 与 spec-ratifier 一致）：
+#   1) 显式 --harness-config <path> 指定的文件（如果存在）
+#   2) 从 $PWD 向上查找最近的 .harness/config.env，自动 source（set -a）
+#   3) 当前 shell 已 export 的变量（如 ~/.zshrc）
+#
+#   变量名（按优先级，前者覆盖后者）：
+#     FACIO_LARK_WEBHOOK_URL_<PRODUCT_UPPER>   选填，按 product 路由
+#       （product 名小写连字符 → 大写下划线，e.g. video-editor → VIDEO_EDITOR）
+#     FACIO_LARK_WEBHOOK_URL                   必填，默认 webhook
+#
+#   变量名对齐 spec-ratifier，让团队配一份 .harness/config.env 即可同时支撑两个 skill。
 #
 # 退出码：
 #   0 成功 / 2 参数错误 / 3 webhook 未配置 / 4 文档操作失败 / 5 webhook 发送失败 / 6 lark-cli 认证失效
@@ -44,17 +51,19 @@ STAGE=""
 PRODUCT=""
 DOC_ID=""
 SUMMARY=""
+HARNESS_CONFIG_FLAG=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --title)    TITLE="$2"; shift 2 ;;
-    --markdown) MARKDOWN_FILE="$2"; shift 2 ;;
-    --stage)    STAGE="$2"; shift 2 ;;
-    --product)  PRODUCT="$2"; shift 2 ;;
-    --doc-id)   DOC_ID="$2"; shift 2 ;;
-    --summary)  SUMMARY="$2"; shift 2 ;;
-    -h|--help)  usage; exit 0 ;;
-    *)          echo "unknown arg: $1" >&2; usage >&2; exit 2 ;;
+    --title)           TITLE="$2"; shift 2 ;;
+    --markdown)        MARKDOWN_FILE="$2"; shift 2 ;;
+    --stage)           STAGE="$2"; shift 2 ;;
+    --product)         PRODUCT="$2"; shift 2 ;;
+    --doc-id)          DOC_ID="$2"; shift 2 ;;
+    --summary)         SUMMARY="$2"; shift 2 ;;
+    --harness-config)  HARNESS_CONFIG_FLAG="$2"; shift 2 ;;
+    -h|--help)         usage; exit 0 ;;
+    *)                 echo "unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
@@ -72,26 +81,65 @@ case "$STAGE" in
     echo "--stage must be decided or closed" >&2; exit 2 ;;
 esac
 
-# -------- 解析 webhook URL（FEISHU_WEBHOOK_<PRODUCT> → FEISHU_WEBHOOK_URL） --------
+# -------- source .harness/config.env（与 spec-ratifier 同款 file-wins 范式） --------
+# 解析顺序：--harness-config 显式 > 向上找 .harness/config.env > 已 export 的环境变量
+find_harness_config() {
+  local dir="$PWD"
+  while [[ "$dir" != "/" && -n "$dir" ]]; do
+    if [[ -f "$dir/.harness/config.env" ]]; then
+      printf '%s\n' "$dir/.harness/config.env"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+HARNESS_CONFIG=""
+if [[ -n "$HARNESS_CONFIG_FLAG" ]]; then
+  if [[ -f "$HARNESS_CONFIG_FLAG" ]]; then
+    HARNESS_CONFIG="$HARNESS_CONFIG_FLAG"
+  else
+    echo "warning: --harness-config $HARNESS_CONFIG_FLAG 不存在，回退到自动检测" >&2
+  fi
+fi
+if [[ -z "$HARNESS_CONFIG" ]]; then
+  HARNESS_CONFIG="$(find_harness_config || true)"
+fi
+
+if [[ -n "$HARNESS_CONFIG" && -f "$HARNESS_CONFIG" ]]; then
+  echo "      source: $HARNESS_CONFIG" >&2
+  set -a
+  # shellcheck source=/dev/null
+  . "$HARNESS_CONFIG"
+  set +a
+fi
+
+# -------- 解析 webhook URL --------
 WEBHOOK_URL=""
 if [[ -n "$PRODUCT" ]]; then
   PRODUCT_KEY="$(printf '%s' "$PRODUCT" | tr 'a-z-' 'A-Z_')"
-  WEBHOOK_VAR="FEISHU_WEBHOOK_${PRODUCT_KEY}"
+  WEBHOOK_VAR="FACIO_LARK_WEBHOOK_URL_${PRODUCT_KEY}"
   WEBHOOK_URL="${!WEBHOOK_VAR:-}"
 fi
 if [[ -z "$WEBHOOK_URL" ]]; then
-  WEBHOOK_URL="${FEISHU_WEBHOOK_URL:-}"
+  WEBHOOK_URL="${FACIO_LARK_WEBHOOK_URL:-}"
 fi
 
 if [[ -z "$WEBHOOK_URL" ]]; then
   cat >&2 <<'ERR'
-未找到飞书 webhook 配置。请在 ~/.zshrc 或 ~/.bashrc 里加：
+未找到飞书 webhook 配置（FACIO_LARK_WEBHOOK_URL）。请任选一种方式配置：
 
-    export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<your-hook-id>"
+  方式 A（推荐，团队共享）— 在项目根 .harness/config.env 添加：
+      FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
+    仅私有仓库可提交；公开仓库需加入 .gitignore。
 
-然后 `source ~/.zshrc` 或重开终端再试。
+  方式 B（个人）— 在 ~/.zshrc 或 ~/.bashrc 添加：
+      export FACIO_LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
+    然后 source ~/.zshrc 或重开终端。
 
-详见 facio-superpowers README「接入飞书同步」一节。
+变量名对齐 spec-ratifier；配一份即可同时支撑两个 skill。
+详见 facio-superpowers README「飞书群同步」+ .harness/README.md「Lark webhook 配置」。
 ERR
   exit 3
 fi

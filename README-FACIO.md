@@ -129,42 +129,67 @@ flow skill 在两个关键节点会主动询问是否将 spec 同步到飞书群
 
 用户每次都可以拒绝；拒绝即跳过、不追问。
 
-### 一次性接入（≤2 分钟）
+### 一次性接入
+
+flow 飞书同步的 webhook URL 变量名是 `FACIO_LARK_WEBHOOK_URL`（对齐 spec-ratifier — 配一份同时支撑两个 skill）。
+
+**推荐方式 A（团队共享，私有项目）** — 项目根 `.harness/config.env`：
+
+```ini
+# 团队基线值。spec-ratifier 和 flow 飞书同步都会自动 source 此文件
+FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
+```
+
+如果项目已经为 spec-ratifier 配过 `FACIO_LARK_WEBHOOK_URL`，**flow 飞书同步无需任何额外配置**就能用，直接拉新版 skill 即可。
+
+**备选方式 B（个人环境，公开项目）** — `~/.zshrc` 或 `~/.bashrc`：
 
 ```bash
-# 1) 在 ~/.zshrc 或 ~/.bashrc 加一行
-export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<your-hook-id>"
+export FACIO_LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
+```
 
-# 2) 飞书 OAuth 认证（一次性）
+**最后两步（任何方式都需要）**：
+
+```bash
+# 飞书 OAuth 认证（一次性）
 npx @larksuite/cli auth login
 
-# 3) source 或重开终端
-source ~/.zshrc
-
-# 4) 拉最新 skills
+# 拉最新 skills
 npx @vattention/facio-superpowers sync
 ```
 
 跑一次 `npx @larksuite/cli doctor` 应看到 `token_exists: pass`，下次走 flow 工作流到 decide/close 时 skill 就会主动询问。
 
+### 解析顺序（file-wins）
+
+脚本按以下顺序拿 webhook URL，前者覆盖后者：
+
+1. `--harness-config <path>` 显式指定
+2. 从 `$PWD` 向上找最近的 `.harness/config.env`，自动 `source`
+3. 当前 shell 已 export 的环境变量
+
+也就是说：**项目级 `.harness/config.env` 的值会覆盖个人 `~/.zshrc` 的 export**。临时想用个人值时，把项目文件里的对应行注释掉重跑即可。
+
 ### Webhook URL 从哪拿？
 
-向团队管理员索取「facio 需求同步」总群的飞书群机器人 webhook URL。每位同事用同一个 URL（消息发到同一个群），不会冲突。
+向团队管理员索取群机器人 webhook URL（飞书群 → 群设置 → 群机器人 → 添加自定义机器人 → 复制 URL）。
 
 ### 多产品路由（选填）
 
-如果未来要按 product 发到不同群：
+按 product 路由到不同群：
 
-```bash
+```ini
+# .harness/config.env
+FACIO_LARK_WEBHOOK_URL=https://.../hook/default
+FACIO_LARK_WEBHOOK_URL_VIDEO_EDITOR=https://.../hook/aaaaa
+FACIO_LARK_WEBHOOK_URL_BINN=https://.../hook/bbbbb
+# 脚本优先读 FACIO_LARK_WEBHOOK_URL_<PRODUCT>，缺失则 fall back FACIO_LARK_WEBHOOK_URL
 # product 名小写 + 连字符转下划线 + 全大写
-export FEISHU_WEBHOOK_VIDEO_EDITOR="https://.../hook/aaaaa"
-export FEISHU_WEBHOOK_BINN="https://.../hook/bbbbb"
-# 脚本会优先用产品级，缺失则 fall back 到 FEISHU_WEBHOOK_URL
 ```
 
 ### 安全提示
 
-webhook URL 是「弱 token」— 拿到就能往群里发消息。**绝不要把 URL 提交到任何 git 仓库**，包括 facio-superpowers 本身（这是 PUBLIC 公开仓库）。如果担心 URL 暴露，可在群机器人设置里启用「自定义关键词」限制。
+webhook URL 是「弱 token」— 拿到就能往群里发消息。**仅私有仓库的 `.harness/config.env` 可提交**；公开仓库（如 facio-superpowers 自身）必须把 `.harness/config.env` 加入 `.gitignore`，改走方式 B。如果担心 URL 暴露，可在群机器人设置里启用「自定义关键词」限制。
 
 ## Skills 一览
 

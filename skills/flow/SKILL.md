@@ -254,27 +254,41 @@ flow 工作流在两个关键节点询问用户是否把 spec 同步到飞书群
 
 ### 前置条件
 
-同事一次性接入步骤：
+webhook URL 通过环境变量 `FACIO_LARK_WEBHOOK_URL` 提供（变量名对齐 spec-ratifier，团队配一份同时支撑两个 skill）。
 
-```bash
-# 1) 在 ~/.zshrc 或 ~/.bashrc 加一行（必填）
-export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<your-hook-id>"
+**读取顺序**（file-wins，与 spec-ratifier 一致）：
 
-# 2) 飞书 OAuth 认证（一次性）
-npx @larksuite/cli auth login
+1. `--harness-config <path>` 显式指定的文件
+2. 从 `$PWD` 向上找最近的 `.harness/config.env`，自动 `set -a; . <file>; set +a`
+3. 当前 shell 已 export 的同名变量
 
-# 3) 后续 source 一下 shell rc 或重开终端
-source ~/.zshrc
+**推荐配置方式（团队共享，私有项目）** — 在项目根 `.harness/config.env`：
+
+```ini
+# Required by spec-ratifier + flow skill 飞书同步
+FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
 ```
 
-**多产品扩展**（选填）：
+此文件 spec-ratifier pre-check 也会 source；一次配置两处受益。**仅私有仓库可提交**，公开仓库需加入 `.gitignore` 改走方式 B。
+
+**备选方式（个人环境，公开项目）** — 在 `~/.zshrc` 或 `~/.bashrc`：
 
 ```bash
-# product 名小写转大写、连字符转下划线
-export FEISHU_WEBHOOK_VIDEO_EDITOR="https://.../hook/xxx"
-export FEISHU_WEBHOOK_BINN="https://.../hook/yyy"
-# 脚本优先读 FEISHU_WEBHOOK_<PRODUCT>，fall back 到 FEISHU_WEBHOOK_URL
+export FACIO_LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
 ```
+
+**多产品扩展**（选填）— 当不同 product 要发到不同群时：
+
+```ini
+# .harness/config.env
+FACIO_LARK_WEBHOOK_URL=https://.../hook/default       # 默认
+FACIO_LARK_WEBHOOK_URL_VIDEO_EDITOR=https://.../hook/aaa  # 按 product 路由
+FACIO_LARK_WEBHOOK_URL_BINN=https://.../hook/bbb
+# 脚本优先读 FACIO_LARK_WEBHOOK_URL_<PRODUCT>，fall back 到 FACIO_LARK_WEBHOOK_URL
+# product 名小写 → 大写、连字符 → 下划线
+```
+
+**飞书 OAuth**（一次性）：`npx @larksuite/cli auth login`
 
 ### 流程
 
@@ -356,9 +370,10 @@ manage_artifact(
 | 退出码 | 含义 | 应对 |
 |-------|------|------|
 | 2 | 参数错误 | 检查 --title / --markdown 路径 / --doc-id 在 closed stage 时是否提供 |
-| 3 | webhook 未配置 | 告诉用户在 ~/.zshrc 加 `export FEISHU_WEBHOOK_URL=...`，并 source/重开终端 |
+| 3 | webhook 未配置 | 让用户在项目 `.harness/config.env` 加 `FACIO_LARK_WEBHOOK_URL=...`，或在 `~/.zshrc` 加 `export FACIO_LARK_WEBHOOK_URL=...` |
 | 4 | 文档创建/更新失败 | 跑 `npx @larksuite/cli doctor` 排查认证；查看 stderr 里的飞书错误码 |
 | 5 | webhook 发送失败 | 检查 URL 有效性 + 群机器人安全设置；文档已建好时把 doc_url 直接贴给用户手动转发 |
+| 6 | lark-cli 未认证 | `npx @larksuite/cli auth login` |
 
 ### 禁止行为
 
