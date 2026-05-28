@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// spec-preview-server.mjs · v2.6.0 production
+// spec-preview-server.mjs · v2.7.0 production
 //
 // Internal HTTP service serving files from configured git repos by running
 // `git show origin/<branch>:<path>` per request. Intended exposure: behind
@@ -277,7 +277,7 @@ export async function handleRequest(req, res, deps) {
   // friendly pages; ANY unexpected error → 503 (never 500/crash — M2).
   let repoDir;
   try {
-    repoDir = await ensureRepo(repo, branch);
+    repoDir = await ensureRepo(repo);
   } catch (err) {
     if (err && (err.code === 'INVALID_NAME' || err.code === 'NOT_IN_SCOPE')) {
       logFn('info', 'repo not in scope', { repo, code: err.code, durMs: Date.now() - start });
