@@ -6,7 +6,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { parseRequest, safeComponent, createApp, handleRequest, loadConfig, validateRuntimeConfig } = await import('./server.mjs');
+const { parseRequest, safeComponent, createApp, handleRequest, loadConfig, validateRuntimeConfig, gitFetch } = await import('./server.mjs');
+
+// ---------------------------------------------------------------------------
+// gitFetch: background refresh must mint a FRESH token each cycle, never reuse
+// the clone-time token persisted in the remote (it expires in ~1h).
+// ---------------------------------------------------------------------------
+
+test('gitFetch: mints a fresh token and fetches an explicit tokenized URL', async () => {
+  let tokenCalls = 0;
+  const getToken = async () => `fresh-tok-${++tokenCalls}`;
+  let capturedArgs = null;
+  const exec = async (_bin, args) => { capturedArgs = args; return { stdout: Buffer.alloc(0) }; };
+
+  await gitFetch('/var/lib/specs/facio-blueprint', { getToken, org: 'vattention', exec, logFn: () => {} });
+
+  assert.equal(tokenCalls, 1);  // fetched a fresh token this cycle
+  const url = capturedArgs.find((a) => a.startsWith('https://'));
+  assert.ok(url.includes('fresh-tok-1'), 'fetch must use the freshly-minted token');
+  assert.ok(url.includes('@github.com/vattention/facio-blueprint.git'), 'explicit org/repo URL, not the stored remote');
+  assert.ok(capturedArgs.includes('--prune'));
+});
+
+test('gitFetch: a fetch failure is swallowed (logged) and never throws', async () => {
+  const getToken = async () => 'tok';
+  const exec = async () => { throw new Error('network down'); };
+  let warned = false;
+  await gitFetch('/var/lib/specs/x', { getToken, org: 'o', exec, logFn: (lvl) => { if (lvl === 'warn') warned = true; } });
+  assert.equal(warned, true);  // resolved, did not throw
+});
+
+test('gitFetch: never logs the token-bearing url on failure', async () => {
+  const getToken = async () => 'SECRET-TOKEN';
+  const exec = async () => { throw new Error('boom https://x-access-token:SECRET-TOKEN@github.com/...'); };
+  const logged = [];
+  await gitFetch('/var/lib/specs/x', { getToken, org: 'o', exec, logFn: (lvl, msg, fields) => logged.push(JSON.stringify({ lvl, msg, fields })) });
+  assert.ok(!logged.join('').includes('SECRET-TOKEN'), 'token must never reach logs');
+});
 
 test('module import does not bind a port (createApp factory exported)', async () => {
   const mod = await import('./server.mjs');
