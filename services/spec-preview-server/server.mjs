@@ -40,7 +40,7 @@ import { rename, rm } from 'node:fs/promises';
 
 import { gitShow as realGitShow, resolveDefaultBranch as realResolveDefaultBranch } from './git-show.mjs';
 import { ensureRepo as realEnsureRepo } from './provision.mjs';
-import { createTokenProvider, isValidRepoName } from './github-app.mjs';
+import { createTokenProvider, isValidRepoName, buildCloneUrl } from './github-app.mjs';
 import { renderErrorPage } from './error-page.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -440,7 +440,7 @@ export async function gitFetch(dir, { getToken, org, exec = execFileAsync, logFn
   try {
     const repo = basename(dir);
     const token = await getToken();
-    const url = `https://x-access-token:${token}@github.com/${org}/${repo}.git`;
+    const url = buildCloneUrl({ org, repo, token });  // single source for the token-URL format
     await exec('git', ['-C', dir, 'fetch', '--prune', '--quiet', url, '+refs/heads/*:refs/remotes/origin/*'], { timeout: 30000 });
   } catch {
     // Never log the error or url (both can echo the token). The dir alone is safe.
