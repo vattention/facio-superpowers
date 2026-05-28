@@ -1,0 +1,12 @@
+[Unit]
+Description=spec-preview-server self-update (pull main + redeploy when its code changes)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root (needs to write /opt and restart the service). git itself runs as
+# REPO_OWNER from inside the script. Override these if your checkout differs:
+# Environment=REPO_DIR=/home/ssm-user/vattention/facio-superpowers
+# Environment=REPO_OWNER=ssm-user
+ExecStart=/opt/spec-preview-server/auto-update.sh
