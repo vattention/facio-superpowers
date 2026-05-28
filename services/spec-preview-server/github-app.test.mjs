@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
-import { buildAppJwt } from './github-app.mjs';
+import { buildAppJwt, createTokenProvider } from './github-app.mjs';
+
+const PEM = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs1', format: 'pem' });
 
 test('buildAppJwt: claims + verifiable RS256 signature', () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -18,4 +20,30 @@ test('buildAppJwt: claims + verifiable RS256 signature', () => {
   const v = createVerify('RSA-SHA256');
   v.update(`${h}.${p}`);
   assert.equal(v.verify(publicKey, Buffer.from(sig, 'base64url')), true);
+});
+
+test('createTokenProvider: mints then caches until near expiry', async () => {
+  let calls = 0;
+  let clock = 1000;
+  const fetchImpl = async () => { calls++; return {
+    ok: true, status: 201,
+    json: async () => ({ token: `tok-${calls}`, expires_at: new Date((clock + 3600) * 1000).toISOString() }),
+  };};
+  const provider = createTokenProvider({
+    appId: '1', privateKeyPem: PEM, installationId: '99',
+    fetchImpl, now: () => clock,
+  });
+  assert.equal(await provider.getToken(), 'tok-1');
+  clock += 60;                                  // still well before expiry
+  assert.equal(await provider.getToken(), 'tok-1');   // cached, no 2nd call
+  assert.equal(calls, 1);
+  clock += 3600;                                // past expiry (minus safety window)
+  assert.equal(await provider.getToken(), 'tok-2');   // refreshed
+  assert.equal(calls, 2);
+});
+
+test('createTokenProvider: surfaces API failure', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 401, text: async () => 'bad creds' });
+  const provider = createTokenProvider({ appId: '1', privateKeyPem: PEM, installationId: '99', fetchImpl });
+  await assert.rejects(() => provider.getToken(), /401/);
 });

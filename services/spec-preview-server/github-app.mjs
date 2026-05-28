@@ -11,3 +11,27 @@ export function buildAppJwt({ appId, privateKeyPem, now = Math.floor(Date.now() 
   const sig = signer.sign(privateKeyPem).toString('base64url');
   return `${header}.${payload}.${sig}`;
 }
+
+export function createTokenProvider({ appId, privateKeyPem, installationId, fetchImpl = fetch, now = () => Math.floor(Date.now() / 1000) }) {
+  let cached = null; // { token, expSec }
+  let inflight = null;
+  const SAFETY = 300; // refresh ~5 min before expiry
+  async function mint() {
+    const jwt = buildAppJwt({ appId, privateKeyPem, now: now() });
+    const res = await fetchImpl(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${jwt}`, Accept: 'application/vnd.github+json', 'User-Agent': 'spec-preview-server' },
+    });
+    if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`);
+    const body = await res.json();
+    cached = { token: body.token, expSec: Math.floor(new Date(body.expires_at).getTime() / 1000) };
+    return cached.token;
+  }
+  return {
+    async getToken() {
+      if (cached && now() < cached.expSec - SAFETY) return cached.token;
+      if (!inflight) inflight = mint().finally(() => { inflight = null; });
+      return inflight;
+    },
+  };
+}
