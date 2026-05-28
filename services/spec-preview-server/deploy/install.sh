@@ -2,83 +2,143 @@
 # install.sh — idempotent EC2 setup for spec-preview-server.
 # Run AS ROOT on the target EC2.
 #
+# The server clones any repo in the configured GitHub org ON DEMAND using a
+# GitHub App installation token (no per-repo deploy keys). The GitHub App must
+# be installed on the org with `contents:read` permission.
+#
 # Usage:
-#   sudo bash install.sh '<name>:<git-url>[,<name>:<git-url>...]'
+#   sudo bash install.sh \
+#     --org vattention \
+#     --app-id <app-id> \
+#     --installation-id <installation-id> \
+#     --private-key <path/to/app-private-key.pem> \
+#     [--preseed name,name]
+#
 # Example:
-#   sudo bash install.sh 'facio-blueprint:git@github.com:vattention/facio-blueprint.git'
+#   sudo bash install.sh \
+#     --org vattention \
+#     --app-id 123456 \
+#     --installation-id 78901234 \
+#     --private-key ./spec-preview.private-key.pem \
+#     --preseed facio-blueprint,facio-flow
 
 set -euo pipefail
 
-REPOS_ARG="${1:-}"
-if [ -z "$REPOS_ARG" ]; then
-  echo "Usage: $0 'name:git-url,name:git-url'"
+# ---------------------------------------------------------------------------
+# Parse flags
+# ---------------------------------------------------------------------------
+ORG="vattention"
+APP_ID=""
+INSTALLATION_ID=""
+PRIVATE_KEY_SRC=""
+PRESEED=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --org)             ORG="${2:-}"; shift 2 ;;
+    --app-id)          APP_ID="${2:-}"; shift 2 ;;
+    --installation-id) INSTALLATION_ID="${2:-}"; shift 2 ;;
+    --private-key)     PRIVATE_KEY_SRC="${2:-}"; shift 2 ;;
+    --preseed)         PRESEED="${2:-}"; shift 2 ;;
+    -h|--help)
+      sed -n '2,23p' "$0"
+      exit 0 ;;
+    *)
+      echo "✗ unknown argument: $1" >&2
+      echo "  run '$0 --help' for usage" >&2
+      exit 1 ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Validate required flags (never echo the key contents)
+# ---------------------------------------------------------------------------
+MISSING=()
+[ -z "$APP_ID" ]          && MISSING+=("--app-id")
+[ -z "$INSTALLATION_ID" ] && MISSING+=("--installation-id")
+[ -z "$PRIVATE_KEY_SRC" ] && MISSING+=("--private-key")
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  echo "✗ missing required argument(s): ${MISSING[*]}" >&2
+  echo "  run '$0 --help' for usage" >&2
+  exit 1
+fi
+if [ ! -f "$PRIVATE_KEY_SRC" ]; then
+  echo "✗ private key file not found: $PRIVATE_KEY_SRC" >&2
   exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+KEY_DEST=/etc/spec-preview-server.key
+ENV_FILE=/etc/spec-preview-server.env
+INSTALL_DIR=/opt/spec-preview-server
+CACHE_DIR=/var/lib/specs
 
+# ---------------------------------------------------------------------------
 # 1. Create dedicated user (idempotent)
+# ---------------------------------------------------------------------------
 if ! id -u specs >/dev/null 2>&1; then
-  useradd -r -m -d /var/lib/specs -s /bin/bash specs
+  useradd -r -m -d "$CACHE_DIR" -s /bin/bash specs
   echo "✓ created user 'specs'"
 fi
 
-# 2. Verify SSH key exists for the specs user
-SSH_KEY=/var/lib/specs/.ssh/id_ed25519
-if [ ! -f "$SSH_KEY" ]; then
-  echo "✗ SSH key missing: $SSH_KEY"
-  echo "  Run first (as root):"
-  echo "    sudo -u specs ssh-keygen -t ed25519 -f $SSH_KEY -N ''"
-  echo "    sudo -u specs cat $SSH_KEY.pub"
-  echo "  Then add the public key as a deploy key on each GitHub repo."
-  exit 2
-fi
+# ---------------------------------------------------------------------------
+# 2. Cache dir (world-cloneable RW clone cache, owned by specs)
+# ---------------------------------------------------------------------------
+mkdir -p "$CACHE_DIR"
+chown specs:specs "$CACHE_DIR"
 
-# Make sure GitHub is in known_hosts to avoid first-connect prompt
-sudo -u specs bash -c '[ -f /var/lib/specs/.ssh/known_hosts ] && grep -q github.com /var/lib/specs/.ssh/known_hosts || ssh-keyscan -t ed25519 github.com >> /var/lib/specs/.ssh/known_hosts 2>/dev/null'
+# ---------------------------------------------------------------------------
+# 3. Install the GitHub App private key OUTSIDE the RW clone cache.
+#    /etc/spec-preview-server.key — owner specs, chmod 600. Deliberately NOT
+#    under /var/lib/specs (which the service clones into / is world-readable).
+# ---------------------------------------------------------------------------
+install -o specs -g specs -m 600 "$PRIVATE_KEY_SRC" "$KEY_DEST"
+echo "✓ installed GitHub App private key → $KEY_DEST (chmod 600, owner specs)"
 
-# 3. Clone repos
-mkdir -p /var/lib/specs
-chown specs:specs /var/lib/specs
-IFS=',' read -ra REPO_ENTRIES <<< "$REPOS_ARG"
-REPOS_CONFIG=""
-for ENTRY in "${REPO_ENTRIES[@]}"; do
-  NAME="${ENTRY%%:*}"
-  URL="${ENTRY#*:}"
-  TARGET="/var/lib/specs/$NAME"
-  if [ ! -d "$TARGET/.git" ]; then
-    sudo -u specs git clone "$URL" "$TARGET"
-    echo "✓ cloned $NAME → $TARGET"
-  else
-    echo "ℹ $NAME already cloned at $TARGET (skipping)"
-  fi
-  REPOS_CONFIG="${REPOS_CONFIG}${NAME}:${TARGET},"
+# ---------------------------------------------------------------------------
+# 4. Install ALL server .mjs modules (exclude *.test.mjs).
+# ---------------------------------------------------------------------------
+mkdir -p "$INSTALL_DIR"
+for f in server.mjs github-app.mjs provision.mjs git-show.mjs error-page.mjs; do
+  cp "$SCRIPT_DIR/../$f" "$INSTALL_DIR/$f"
+  chmod 644 "$INSTALL_DIR/$f"
 done
-REPOS_CONFIG="${REPOS_CONFIG%,}"
+echo "✓ installed server modules → $INSTALL_DIR"
 
-# 4. Install server.mjs
-mkdir -p /opt/spec-preview-server
-cp "$SCRIPT_DIR/../server.mjs" /opt/spec-preview-server/server.mjs
-chmod 755 /opt/spec-preview-server/server.mjs
+# ---------------------------------------------------------------------------
+# 5. Write env file (chmod 600). Prefer the key PATH form over inline PEM.
+#    SPEC_PREVIEW_REPOS is OPTIONAL (warm-cache pre-seed hint) — written only
+#    when --preseed was given.
+# ---------------------------------------------------------------------------
+umask 077
+{
+  echo "GITHUB_ORG=$ORG"
+  echo "GITHUB_APP_ID=$APP_ID"
+  echo "GITHUB_APP_INSTALLATION_ID=$INSTALLATION_ID"
+  echo "GITHUB_APP_PRIVATE_KEY_PATH=$KEY_DEST"
+  if [ -n "$PRESEED" ]; then
+    echo "SPEC_PREVIEW_REPOS=$PRESEED"
+  fi
+} > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+echo "✓ wrote env → $ENV_FILE (chmod 600)"
 
-# 5. Write env file
-cat > /etc/spec-preview-server.env <<EOF
-SPEC_PREVIEW_REPOS=$REPOS_CONFIG
-EOF
-chmod 600 /etc/spec-preview-server.env
-
+# ---------------------------------------------------------------------------
 # 6. Install systemd unit
+# ---------------------------------------------------------------------------
 cp "$SCRIPT_DIR/../systemd/spec-preview-server.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now spec-preview-server
 
+# ---------------------------------------------------------------------------
 # 7. Verify
+# ---------------------------------------------------------------------------
 sleep 2
 if systemctl is-active --quiet spec-preview-server; then
   echo "✓ spec-preview-server running on port 8080"
   curl -s http://localhost:8080/healthz && echo
 else
-  echo "✗ service failed to start; inspect logs:"
-  echo "    journalctl -u spec-preview-server -n 50"
+  echo "✗ service failed to start; inspect logs:" >&2
+  echo "    journalctl -u spec-preview-server -n 50" >&2
   exit 3
 fi
