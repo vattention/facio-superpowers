@@ -41,7 +41,7 @@ while [ $# -gt 0 ]; do
     --private-key)     PRIVATE_KEY_SRC="${2:-}"; shift 2 ;;
     --preseed)         PRESEED="${2:-}"; shift 2 ;;
     -h|--help)
-      sed -n '2,30p' "$0"
+      sed -n '2,23p' "$0"
       exit 0 ;;
     *)
       echo "✗ unknown argument: $1" >&2
@@ -87,15 +87,6 @@ fi
 mkdir -p "$CACHE_DIR"
 chown specs:specs "$CACHE_DIR"
 
-# Ensure github.com is in known_hosts (harmless; HTTPS clone is the norm but git
-# may fall back / future-proof). Best-effort, never fatal.
-sudo -u specs bash -c '
-  mkdir -p /var/lib/specs/.ssh
-  if [ ! -f /var/lib/specs/.ssh/known_hosts ] || ! grep -q github.com /var/lib/specs/.ssh/known_hosts; then
-    ssh-keyscan -t ed25519 github.com >> /var/lib/specs/.ssh/known_hosts 2>/dev/null || true
-  fi
-' || true
-
 # ---------------------------------------------------------------------------
 # 3. Install the GitHub App private key OUTSIDE the RW clone cache.
 #    /etc/spec-preview-server.key — owner specs, chmod 600. Deliberately NOT
@@ -112,7 +103,6 @@ for f in server.mjs github-app.mjs provision.mjs git-show.mjs error-page.mjs; do
   cp "$SCRIPT_DIR/../$f" "$INSTALL_DIR/$f"
   chmod 644 "$INSTALL_DIR/$f"
 done
-chmod 755 "$INSTALL_DIR/server.mjs"
 echo "✓ installed server modules → $INSTALL_DIR"
 
 # ---------------------------------------------------------------------------
