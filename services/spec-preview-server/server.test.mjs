@@ -1,23 +1,17 @@
-// server.test.mjs — unit tests for parseRequest + safeComponent.
+// server.test.mjs — unit tests for parseRequest + safeComponent + factory purity.
 //
-// Note: server.mjs starts listening at module load. To test without binding
-// a port, we'd need to refactor server.mjs to factor out listen. For v2.6.0
-// we accept the listener and provide a dummy SPEC_PREVIEW_REPOS env at test
-// start (process.exit before tests run would prevent that).
-//
-// Workaround: import-then-stop the server.
-import { test, after } from 'node:test';
+// Importing server.mjs is now side-effect free: the listen() / fetch timer are
+// guarded behind an isMain check, and the request handler is extracted into an
+// exported handleRequest / createApp factory. No port is bound at import time.
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.SPEC_PREVIEW_REPOS = process.env.SPEC_PREVIEW_REPOS || 'test:/tmp';
-process.env.PORT = process.env.PORT || '0';  // OS-assigned ephemeral port
+const { parseRequest, safeComponent, createApp, handleRequest } = await import('./server.mjs');
 
-const { parseRequest, safeComponent } = await import('./server.mjs');
-
-after(() => {
-  // Server keeps event loop alive; force exit after tests complete.
-  // (Real fix in v2.6.1: refactor server.mjs to export createServer factory.)
-  setTimeout(() => process.exit(0), 100).unref();
+test('module import does not bind a port (createApp factory exported)', async () => {
+  const mod = await import('./server.mjs');
+  assert.equal(typeof mod.createApp, 'function');
+  assert.equal(typeof mod.handleRequest, 'function');
 });
 
 test('parseRequest: simple 3-segment URL', () => {
