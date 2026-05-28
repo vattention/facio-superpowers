@@ -156,6 +156,75 @@ Development complete. Before committing, I recommend:
 Would you like me to call /verification-before-completion now? (yes/no)
 ```
 
+## 飞书群同步（接入步骤）
+
+flow skill 在两个关键节点会主动询问是否将 spec 同步到飞书群：
+
+| 时机 | 行为 |
+|------|------|
+| `decide_context` 之后 | 创建一份新的飞书文档，把决策点 + 验收标准推到「facio 需求同步」群 |
+| `close_context` 之后 | 整篇覆盖**同一份**飞书文档（1 context = 1 doc 迭代），把最终方案 + 验证结果推到群 |
+
+用户每次都可以拒绝；拒绝即跳过、不追问。
+
+flow 飞书同步的 webhook URL 通过 `.harness/config.env` 提供（变量名 `FACIO_LARK_WEBHOOK_URL`，对齐 spec-ratifier — 同一份配置同时支撑两个 skill）。
+
+### 项目首次接入（项目 owner 一次性）
+
+```bash
+# 1) 生成 .harness/ 骨架（包含 config.env）
+npx @vattention/facio-flow@latest init
+
+# 2) 编辑 .harness/config.env，填入飞书群机器人 webhook URL
+#    FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
+
+# 3) commit + push 到工程主分支（仅私有仓库，下方有公开仓库注意事项）
+git add .harness/config.env
+git commit -m "chore(harness): 配置飞书同步 webhook"
+git push
+```
+
+Webhook URL 获取方式：飞书群 → 群设置 → 群机器人 → 添加自定义机器人 → 复制 URL。
+
+### 同事接入（每人一次性）
+
+```bash
+git pull                                                # 拿到 .harness/config.env
+npx @vattention/facio-superpowers@latest init           # 装 skills（含 flow）
+npx @larksuite/cli auth login                           # 飞书 OAuth
+```
+
+之后无需任何额外配置。下次走 flow 工作流到 `decide_context` / `close_context` → skill 主动询问飞书同步 → 同意则自动从当前项目的 `.harness/config.env` 拿 webhook 同步。
+
+### 工作原理（解析顺序，file-wins）
+
+skill 跑 sync-to-feishu.sh 时按以下顺序拿 webhook URL，前者覆盖后者：
+
+1. `--harness-config <path>` 显式指定（一般不用）
+2. 从 `$PWD` 向上找最近的 `.harness/config.env`，自动 `set -a; . <file>; set +a`
+3. 当前 shell 已 export 的同名变量（仅作 fallback）
+
+也就是说：**只要你在项目目录里跑 flow 工作流，配置自动生效，无需 export 任何东西**。
+
+### 多产品路由（选填）
+
+按 product 路由到不同群：
+
+```ini
+# .harness/config.env
+FACIO_LARK_WEBHOOK_URL=https://.../hook/default
+FACIO_LARK_WEBHOOK_URL_VIDEO_EDITOR=https://.../hook/aaaaa
+FACIO_LARK_WEBHOOK_URL_BINN=https://.../hook/bbbbb
+# 脚本优先读 FACIO_LARK_WEBHOOK_URL_<PRODUCT>，缺失则 fall back FACIO_LARK_WEBHOOK_URL
+# product 名小写 + 连字符转下划线 + 全大写
+```
+
+### 公开仓库特殊处理
+
+webhook URL 是「弱 token」— 拿到就能发消息。**仅私有仓库的 `.harness/config.env` 可提交**；公开仓库（如 facio-superpowers 自身）必须把 `.harness/config.env` 加入 `.gitignore`，改用个人 shell profile（`export FACIO_LARK_WEBHOOK_URL=...`）作为 fallback。
+
+如果担心 URL 泄漏，可在群机器人设置里启用「自定义关键词」限制。
+
 ## Skills 一览
 
 Facio Superpowers 包含 16 个 skills：
