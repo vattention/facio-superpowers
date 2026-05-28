@@ -9,20 +9,33 @@
 //   GET /<repo>/<branch>/<path...>  → file content (Content-Type by ext)
 //   GET /healthz                    → "ok"
 //
-// Env config:
-//   PORT                  (default 8080)
-//   SPEC_PREVIEW_REPOS    "name:abs-path,name:abs-path"  (REQUIRED at start())
-//   FETCH_INTERVAL_MS     (default 30000)
-//   CACHE_TTL_MS          (default 5000)
+// Env config (read by loadConfig; see also validateRuntimeConfig):
+//   GITHUB_ORG                   org whose repos are served on demand (default "vattention")
+//   GITHUB_APP_ID                GitHub App id                       (REQUIRED at start())
+//   GITHUB_APP_INSTALLATION_ID   App installation id                 (REQUIRED at start())
+//   GITHUB_APP_PRIVATE_KEY       App private key (inline PEM)         (REQUIRED at start(),
+//   GITHUB_APP_PRIVATE_KEY_PATH    OR a path to the PEM file          unless _KEY is set)
+//   GITHUB_DEFAULT_BRANCH        fallback branch for durable links   (default "main")
+//   CACHE_DIR                    on-disk clone cache root            (default "/var/lib/specs")
+//   PORT                         (default 8080)
+//   FETCH_INTERVAL_MS            (default 30000)
+//   CACHE_TTL_MS                 (default 5000)
+//   SPEC_PREVIEW_REPOS           OPTIONAL pre-seed hint "name:path,name" — purely a warm-cache
+//                                hint; repos are cloned ON DEMAND regardless. Absent → none.
 //
-// Importing this module is side-effect free: listen()/the fetch timer only run
-// when the module is the process entrypoint (isMain) or via createApp().start().
+// Legacy aliases (still honoured as fallbacks): SPEC_PREVIEW_ORG,
+// SPEC_PREVIEW_CACHE_DIR, SPEC_PREVIEW_DEFAULT_BRANCH.
+//
+// Importing this module is side-effect free: loadConfig NEVER throws, and
+// listen()/the fetch timer only run when the module is the process entrypoint
+// (isMain) or via createApp().start(). validateRuntimeConfig (fail-fast on
+// missing App creds) runs inside start(), NOT at import time.
 
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { extname, join } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
 
 import { gitShow as realGitShow, resolveDefaultBranch as realResolveDefaultBranch } from './git-show.mjs';
@@ -49,41 +62,88 @@ const MIME = {
 // Config
 // ---------------------------------------------------------------------------
 
-function parseRepos(raw) {
-  if (!raw) return new Map();
-  return new Map(
-    raw.split(',').map(entry => {
+// SPEC_PREVIEW_REPOS is now an OPTIONAL pre-seed hint (warm-cache), NOT a gate:
+// repos are cloned on demand regardless. Parse "name:path,name" into a list of
+// { name, path|null }. Entries with no ':' are bare names (path → null). This
+// parser is intentionally LENIENT — it NEVER throws (keeps loadConfig pure):
+// absent/empty/blank-only input → []. Blank segments are dropped.
+function parsePreSeed(raw) {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
       const idx = entry.indexOf(':');
-      if (idx < 0) throw new Error(`bad SPEC_PREVIEW_REPOS entry: ${entry}`);
-      return [entry.slice(0, idx).trim(), entry.slice(idx + 1).trim()];
-    })
-  );
+      if (idx < 0) return { name: entry, path: null };
+      return { name: entry.slice(0, idx).trim(), path: entry.slice(idx + 1).trim() || null };
+    });
 }
 
-// NOTE: full env plumbing + validateRuntimeConfig lands in Task 9. Here we read
-// minimal shapes for the org-wide on-demand-clone deps (org / cacheDir /
-// defaultBranch / GitHub App creds). The integration tests inject their own deps
-// so they do not depend on any of these env vars being set.
+// Read the GitHub App PEM either inline (GITHUB_APP_PRIVATE_KEY) or from a file
+// (GITHUB_APP_PRIVATE_KEY_PATH). Reading the path is best-effort: an unreadable
+// path leaves privateKeyPem undefined so validateRuntimeConfig surfaces the
+// "missing creds" failure at start() — it MUST NOT crash module import.
+function loadPrivateKeyPem(env) {
+  if (env.GITHUB_APP_PRIVATE_KEY) return env.GITHUB_APP_PRIVATE_KEY;
+  if (env.GITHUB_APP_PRIVATE_KEY_PATH) {
+    try {
+      return readFileSync(env.GITHUB_APP_PRIVATE_KEY_PATH, 'utf8');
+    } catch {
+      // Never log the path/error here; validateRuntimeConfig will report the
+      // missing-credential condition cleanly at boot.
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+// Assemble config.app in the shape buildDefaultDeps / createTokenProvider expect:
+// { appId, installationId, privateKeyPem }. Returns null when ALL three are
+// absent (the common "creds not configured" case) so validateRuntimeConfig can
+// detect it; returns a partial object when SOME but not all are present so the
+// error message can be precise about what's missing.
 function loadAppConfig(env) {
   const appId = env.GITHUB_APP_ID;
-  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY;
   const installationId = env.GITHUB_APP_INSTALLATION_ID;
-  if (!appId || !privateKeyPem || !installationId) return null;
-  return { appId, privateKeyPem, installationId };
+  const privateKeyPem = loadPrivateKeyPem(env);
+  if (!appId && !installationId && !privateKeyPem) return null;
+  return { appId, installationId, privateKeyPem };
 }
 
+// PURE: never throws, never exits, no I/O beyond an optional best-effort PEM
+// file read (which swallows its own errors). Safe to call at import / in tests.
 export function loadConfig(env = process.env) {
   return {
     port: parseInt(env.PORT || '8080', 10),
     fetchIntervalMs: parseInt(env.FETCH_INTERVAL_MS || '30000', 10),
     cacheTtlMs: parseInt(env.CACHE_TTL_MS || '5000', 10),
-    repos: parseRepos(env.SPEC_PREVIEW_REPOS),
-    // org-wide on-demand clone (Task 8 wiring; Task 9 validates/expands)
-    org: env.SPEC_PREVIEW_ORG || 'vattention',
-    cacheDir: env.SPEC_PREVIEW_CACHE_DIR || '/var/lib/specs',
-    defaultBranch: env.SPEC_PREVIEW_DEFAULT_BRANCH || 'main',
+    // org-wide on-demand clone target + cache layout
+    org: env.GITHUB_ORG || env.SPEC_PREVIEW_ORG || 'vattention',
+    cacheDir: env.CACHE_DIR || env.SPEC_PREVIEW_CACHE_DIR || '/var/lib/specs',
+    defaultBranch: env.GITHUB_DEFAULT_BRANCH || env.SPEC_PREVIEW_DEFAULT_BRANCH || 'main',
     app: loadAppConfig(env),
+    // OPTIONAL pre-seed/warm-cache hint — absent → []; never a gate.
+    preSeed: parsePreSeed(env.SPEC_PREVIEW_REPOS),
   };
+}
+
+// Fail-fast boot guard. Called from start() (NOT at import) so the service never
+// boots into a state where the GitHub App token provider always rejects and every
+// request 503s silently. Throws an Error mentioning GITHUB_APP listing the missing
+// field(s); returns undefined on success. NEVER logs/echoes the private key.
+export function validateRuntimeConfig(config) {
+  const app = config.app || {};
+  const missing = [];
+  if (!app.appId) missing.push('GITHUB_APP_ID');
+  if (!app.installationId) missing.push('GITHUB_APP_INSTALLATION_ID');
+  if (!app.privateKeyPem) missing.push('GITHUB_APP_PRIVATE_KEY (or GITHUB_APP_PRIVATE_KEY_PATH)');
+  if (missing.length > 0) {
+    throw new Error(
+      `GitHub App credentials missing/incomplete — set: ${missing.join(', ')}. ` +
+      'The service requires a GitHub App to clone org repos on demand.'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +444,9 @@ export function createApp(deps) {
   }
 
   function start() {
+    // Fail-fast at boot: if the GitHub App creds are missing/incomplete, throw
+    // here rather than booting into a state where every request 503s silently.
+    validateRuntimeConfig(config);
     fetchTimer = setInterval(refreshAll, config.fetchIntervalMs);
     refreshAll();
     server.listen(config.port, () => {
