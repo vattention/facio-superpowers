@@ -54,7 +54,9 @@ if run_git diff --quiet "$BEFORE" "$AFTER" -- "$SRC_SUBDIR/"; then
 fi
 
 log "$SRC_SUBDIR changed → refreshing modules + restarting"
-mkdir -p "$INSTALL_DIR"
+# Don't mkdir -p: a typo'd INSTALL_DIR would silently get a stray dir while the
+# real service serves stale code. install.sh creates this dir — require it.
+[ -d "$INSTALL_DIR" ] || { log "INSTALL_DIR $INSTALL_DIR missing — run install.sh first; abort"; exit 1; }
 for f in $MODULES; do
   cp "$REPO_DIR/$SRC_SUBDIR/$f" "$INSTALL_DIR/$f"
   chmod 644 "$INSTALL_DIR/$f"
@@ -67,4 +69,12 @@ if ! run_git diff --quiet "$BEFORE" "$AFTER" -- "$SRC_SUBDIR/deploy/" "$SRC_SUBD
 fi
 
 systemctl restart "$SERVICE"
-log "restarted $SERVICE @ ${AFTER:0:8}"
+# Verify it actually came back — a bad commit that crashes on boot must not pass
+# silently (this is auto-deploy with no human gate). Non-zero exit marks the timer
+# run failed in `systemctl status`, leaving a signal in the journal.
+sleep 2
+if ! systemctl is-active --quiet "$SERVICE"; then
+  log "WARNING: $SERVICE is NOT active after restart @ ${AFTER:0:8} — check 'journalctl -u $SERVICE'"
+  exit 1
+fi
+log "restarted $SERVICE @ ${AFTER:0:8} (active)"
