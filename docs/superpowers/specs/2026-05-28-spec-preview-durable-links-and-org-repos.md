@@ -5,7 +5,7 @@ owners:
   pm: "@DawiniaLo"
   designer: "@DawiniaLo"
   engineer: "@DawiniaLo"
-status: draft
+status: ratified
 role: backend-dev
 references: []
 ---
