@@ -129,50 +129,44 @@ flow skill 在两个关键节点会主动询问是否将 spec 同步到飞书群
 
 用户每次都可以拒绝；拒绝即跳过、不追问。
 
-### 一次性接入
+flow 飞书同步的 webhook URL 通过 `.harness/config.env` 提供（变量名 `FACIO_LARK_WEBHOOK_URL`，对齐 spec-ratifier — 同一份配置同时支撑两个 skill）。
 
-flow 飞书同步的 webhook URL 变量名是 `FACIO_LARK_WEBHOOK_URL`（对齐 spec-ratifier — 配一份同时支撑两个 skill）。
-
-**推荐方式 A（团队共享，私有项目）** — 项目根 `.harness/config.env`：
-
-```ini
-# 团队基线值。spec-ratifier 和 flow 飞书同步都会自动 source 此文件
-FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
-```
-
-如果项目已经为 spec-ratifier 配过 `FACIO_LARK_WEBHOOK_URL`，**flow 飞书同步无需任何额外配置**就能用，直接拉新版 skill 即可。
-
-**备选方式 B（个人环境，公开项目）** — `~/.zshrc` 或 `~/.bashrc`：
+### 项目首次接入（项目 owner 一次性）
 
 ```bash
-export FACIO_LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
+# 1) 生成 .harness/ 骨架（包含 config.env）
+npx @vattention/facio-flow@latest init
+
+# 2) 编辑 .harness/config.env，填入飞书群机器人 webhook URL
+#    FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
+
+# 3) commit + push 到工程主分支（仅私有仓库，下方有公开仓库注意事项）
+git add .harness/config.env
+git commit -m "chore(harness): 配置飞书同步 webhook"
+git push
 ```
 
-**最后两步（任何方式都需要）**：
+Webhook URL 获取方式：飞书群 → 群设置 → 群机器人 → 添加自定义机器人 → 复制 URL。
+
+### 同事接入（每人一次性）
 
 ```bash
-# 飞书 OAuth 认证（一次性）
-npx @larksuite/cli auth login
-
-# 拉最新 skills
-npx @vattention/facio-superpowers sync
+git pull                                                # 拿到 .harness/config.env
+npx @vattention/facio-superpowers@latest init           # 装 skills（含 flow）
+npx @larksuite/cli auth login                           # 飞书 OAuth
 ```
 
-跑一次 `npx @larksuite/cli doctor` 应看到 `token_exists: pass`，下次走 flow 工作流到 decide/close 时 skill 就会主动询问。
+之后无需任何额外配置。下次走 flow 工作流到 `decide_context` / `close_context` → skill 主动询问飞书同步 → 同意则自动从当前项目的 `.harness/config.env` 拿 webhook 同步。
 
-### 解析顺序（file-wins）
+### 工作原理（解析顺序，file-wins）
 
-脚本按以下顺序拿 webhook URL，前者覆盖后者：
+skill 跑 sync-to-feishu.sh 时按以下顺序拿 webhook URL，前者覆盖后者：
 
-1. `--harness-config <path>` 显式指定
-2. 从 `$PWD` 向上找最近的 `.harness/config.env`，自动 `source`
-3. 当前 shell 已 export 的环境变量
+1. `--harness-config <path>` 显式指定（一般不用）
+2. 从 `$PWD` 向上找最近的 `.harness/config.env`，自动 `set -a; . <file>; set +a`
+3. 当前 shell 已 export 的同名变量（仅作 fallback）
 
-也就是说：**项目级 `.harness/config.env` 的值会覆盖个人 `~/.zshrc` 的 export**。临时想用个人值时，把项目文件里的对应行注释掉重跑即可。
-
-### Webhook URL 从哪拿？
-
-向团队管理员索取群机器人 webhook URL（飞书群 → 群设置 → 群机器人 → 添加自定义机器人 → 复制 URL）。
+也就是说：**只要你在项目目录里跑 flow 工作流，配置自动生效，无需 export 任何东西**。
 
 ### 多产品路由（选填）
 
@@ -187,9 +181,11 @@ FACIO_LARK_WEBHOOK_URL_BINN=https://.../hook/bbbbb
 # product 名小写 + 连字符转下划线 + 全大写
 ```
 
-### 安全提示
+### 公开仓库特殊处理
 
-webhook URL 是「弱 token」— 拿到就能往群里发消息。**仅私有仓库的 `.harness/config.env` 可提交**；公开仓库（如 facio-superpowers 自身）必须把 `.harness/config.env` 加入 `.gitignore`，改走方式 B。如果担心 URL 暴露，可在群机器人设置里启用「自定义关键词」限制。
+webhook URL 是「弱 token」— 拿到就能发消息。**仅私有仓库的 `.harness/config.env` 可提交**；公开仓库（如 facio-superpowers 自身）必须把 `.harness/config.env` 加入 `.gitignore`，改用个人 shell profile（`export FACIO_LARK_WEBHOOK_URL=...`）作为 fallback。
+
+如果担心 URL 泄漏，可在群机器人设置里启用「自定义关键词」限制。
 
 ## Skills 一览
 

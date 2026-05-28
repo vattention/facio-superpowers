@@ -254,41 +254,45 @@ flow 工作流在两个关键节点询问用户是否把 spec 同步到飞书群
 
 ### 前置条件
 
-webhook URL 通过环境变量 `FACIO_LARK_WEBHOOK_URL` 提供（变量名对齐 spec-ratifier，团队配一份同时支撑两个 skill）。
+webhook URL 通过项目级 `.harness/config.env` 提供（变量名 `FACIO_LARK_WEBHOOK_URL`，对齐 spec-ratifier — 一份配置同时支撑两个 skill）。
+
+**项目首次接入**（项目 owner 一次性）：
+
+```bash
+npx @vattention/facio-flow@latest init                 # 生成 .harness/config.env 骨架
+# 编辑 .harness/config.env，填入：
+#   FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
+git add .harness/config.env && git commit && git push   # 仅私有仓库可提交
+```
+
+**同事接入**（每人一次性）：
+
+```bash
+git pull                                                # 拿到 .harness/config.env
+npx @vattention/facio-superpowers@latest init           # 装 skills
+npx @larksuite/cli auth login                           # 飞书 OAuth
+```
+
+之后无需 export 任何环境变量。在项目目录里走 flow 工作流时，sync-to-feishu.sh 自动向上找 `.harness/config.env` 并 source。
 
 **读取顺序**（file-wins，与 spec-ratifier 一致）：
 
 1. `--harness-config <path>` 显式指定的文件
 2. 从 `$PWD` 向上找最近的 `.harness/config.env`，自动 `set -a; . <file>; set +a`
-3. 当前 shell 已 export 的同名变量
+3. 当前 shell 已 export 的同名变量（仅 fallback，公开仓库场景才用）
 
-**推荐配置方式（团队共享，私有项目）** — 在项目根 `.harness/config.env`：
-
-```ini
-# Required by spec-ratifier + flow skill 飞书同步
-FACIO_LARK_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>
-```
-
-此文件 spec-ratifier pre-check 也会 source；一次配置两处受益。**仅私有仓库可提交**，公开仓库需加入 `.gitignore` 改走方式 B。
-
-**备选方式（个人环境，公开项目）** — 在 `~/.zshrc` 或 `~/.bashrc`：
-
-```bash
-export FACIO_LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
-```
-
-**多产品扩展**（选填）— 当不同 product 要发到不同群时：
+**多产品扩展**（选填）— 不同 product 路由到不同群：
 
 ```ini
 # .harness/config.env
-FACIO_LARK_WEBHOOK_URL=https://.../hook/default       # 默认
-FACIO_LARK_WEBHOOK_URL_VIDEO_EDITOR=https://.../hook/aaa  # 按 product 路由
+FACIO_LARK_WEBHOOK_URL=https://.../hook/default
+FACIO_LARK_WEBHOOK_URL_VIDEO_EDITOR=https://.../hook/aaa
 FACIO_LARK_WEBHOOK_URL_BINN=https://.../hook/bbb
-# 脚本优先读 FACIO_LARK_WEBHOOK_URL_<PRODUCT>，fall back 到 FACIO_LARK_WEBHOOK_URL
+# 脚本优先 FACIO_LARK_WEBHOOK_URL_<PRODUCT>，fall back FACIO_LARK_WEBHOOK_URL
 # product 名小写 → 大写、连字符 → 下划线
 ```
 
-**飞书 OAuth**（一次性）：`npx @larksuite/cli auth login`
+**公开仓库特殊处理**：`.harness/config.env` 不能进公开仓库（webhook URL 是弱 token），需加入 `.gitignore` 并改用个人 `~/.zshrc` 加 `export FACIO_LARK_WEBHOOK_URL=...`。
 
 ### 流程
 
