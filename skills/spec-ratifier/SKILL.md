@@ -305,10 +305,13 @@ fi
 | Symptom | Cause | Action |
 |---------|-------|--------|
 | `FACIO_SPEC_PREVIEW_BASE_URL not set` | `.harness/config.env` 缺该 var | 添加；或 `SKIP_HTML_PREVIEW=1` 紧急绕过 |
-| reviewer 点 preview URL 拿到 502/404 | spec-preview-server 未起，或 branch 尚未 push | 检查 EC2 service 状态；确认 Step 3A 已 push branch |
+| reviewer 点 preview URL 拿到 502/404 | spec-preview-server 未起，或 branch 尚未 push | 检查 service 状态；确认 Step 3A 已 push branch |
+| 404 "repo not in scope" | repo 不在 `vattention` org，或 GitHub App 未装到该 org/repo | 确认 repo 属于 `vattention` org 且 App 已安装（**无需**逐 repo onboarding） |
 | reviewer 点 preview URL 跳 SSO 后还 404 | spec.html 不在该 branch（spec-author Step 14 未跑） | 回 spec-author Step 14 生成 spec.html + 重 commit |
+| 410 Gone | branch 已删 **且** spec.html 不在默认分支（如 PR 未合并即关闭） | 若需保留 preview，重开/合并 PR 使 spec.html 落到默认分支 |
+| 503 Service Unavailable | preview server 的 GitHub App token mint 失败（transient / infra） | 稍后重试；持续失败则 ping harness owner |
 
-**Note**: spec.html 由 spec-author Step 14 生成，Step 3A 的 git push 已推到 PR 分支；preview server 通过 `git show origin/<branch>:<path>` 拿到。无任何外部上传。
+**Note**: spec.html 由 spec-author Step 14 生成，Step 3A 的 git push 已推到 PR 分支；preview server 按需克隆并通过 `git show origin/<branch>:<path>` 取文件。无任何外部上传。`vattention` org 下的**任意** repo 都可 preview，无需逐 repo onboarding（server 经 GitHub App 按需 clone）。PR 合并 + branch 删除后，**同一 preview 链接仍然有效** —— preview server 自动 fallback 到 repo 的默认分支（提供已合并的 spec.html）。因此飞书卡片里的链接是**持久**的，不受 branch 生命周期限制。
 
 ## Step 4A · Build review_requested Lark Card Payload
 
