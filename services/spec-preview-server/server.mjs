@@ -242,7 +242,9 @@ async function realGitClone(url, dest) {
 
 function sendErrorPage(res, kind, ctx) {
   const { status, contentType, body } = renderErrorPage(kind, ctx);
-  res.writeHead(status, { 'Content-Type': contentType });
+  // no-store: errors (404/410/503) must NOT be cached at the Cloudflare edge —
+  // a cached error would persist after a link "revives" via default-branch fallback.
+  res.writeHead(status, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
   return res.end(body);
 }
 
