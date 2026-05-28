@@ -21,7 +21,14 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { rename, rm } from 'node:fs/promises';
+
+import { gitShow as realGitShow } from './git-show.mjs';
+import { ensureRepo as realEnsureRepo } from './provision.mjs';
+import { createTokenProvider, isValidRepoName } from './github-app.mjs';
+import { renderErrorPage } from './error-page.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -53,12 +60,29 @@ function parseRepos(raw) {
   );
 }
 
+// NOTE: full env plumbing + validateRuntimeConfig lands in Task 9. Here we read
+// minimal shapes for the org-wide on-demand-clone deps (org / cacheDir /
+// defaultBranch / GitHub App creds). The integration tests inject their own deps
+// so they do not depend on any of these env vars being set.
+function loadAppConfig(env) {
+  const appId = env.GITHUB_APP_ID;
+  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY;
+  const installationId = env.GITHUB_APP_INSTALLATION_ID;
+  if (!appId || !privateKeyPem || !installationId) return null;
+  return { appId, privateKeyPem, installationId };
+}
+
 export function loadConfig(env = process.env) {
   return {
     port: parseInt(env.PORT || '8080', 10),
     fetchIntervalMs: parseInt(env.FETCH_INTERVAL_MS || '30000', 10),
     cacheTtlMs: parseInt(env.CACHE_TTL_MS || '5000', 10),
     repos: parseRepos(env.SPEC_PREVIEW_REPOS),
+    // org-wide on-demand clone (Task 8 wiring; Task 9 validates/expands)
+    org: env.SPEC_PREVIEW_ORG || 'vattention',
+    cacheDir: env.SPEC_PREVIEW_CACHE_DIR || '/var/lib/specs',
+    defaultBranch: env.SPEC_PREVIEW_DEFAULT_BRANCH || 'main',
+    app: loadAppConfig(env),
   };
 }
 
@@ -95,32 +119,48 @@ export function parseRequest(pathname) {
 }
 
 // ---------------------------------------------------------------------------
-// git helpers
+// git helpers (production dep implementations live in buildDefaultDeps)
 // ---------------------------------------------------------------------------
 
-async function gitFetch(name, dir, logFn = log) {
+// git(args) → { code, stdout:Buffer }. Resolves on BOTH success and non-zero
+// exit (gitShow/resolveDefaultBranch discriminate on the exit code, never throw).
+async function realGit(args) {
   try {
-    await execFileAsync('git', ['-C', dir, 'fetch', '--all', '--prune', '--quiet'], { timeout: 30000 });
+    const { stdout } = await execFileAsync('git', args, {
+      encoding: 'buffer',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return { code: 0, stdout };
   } catch (err) {
-    logFn('warn', 'git fetch failed', { repo: name, error: err.message });
+    // Non-zero exit (e.g. unknown ref / missing path) is an expected signal, not
+    // a crash. Surface the code; never propagate stderr (it may echo a ref/path).
+    return { code: typeof err.code === 'number' ? err.code : 1, stdout: Buffer.alloc(0) };
   }
 }
 
-export async function gitShow(repoDir, branch, filePath) {
-  const ref = `origin/${branch}`;
+// Atomic clone: clone into a temp sibling, then rename into place. A failed or
+// partial clone never leaves a half-written `dest/.git` that existsSync() would
+// later treat as a valid cached repo.
+//
+// SECURITY: `url` embeds the installation token (x-access-token:<token>@...).
+// NEVER log `url` or the underlying git error — both can echo the token.
+async function realGitClone(url, dest) {
+  const tmp = `${dest}.tmp-${process.pid}-${Date.now()}`;
   try {
-    await execFileAsync('git', ['-C', repoDir, 'rev-parse', '--verify', ref], { timeout: 5000 });
-  } catch {
-    return { status: 'branch-not-found' };
+    await execFileAsync('git', ['clone', '--quiet', url, tmp], {
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } catch (err) {
+    await rm(tmp, { recursive: true, force: true });
+    // Rethrow a sanitized error — drop message/cause so the token-bearing URL
+    // never reaches a caller's log. ensureRepo maps this to NOT_IN_SCOPE.
+    throw new Error('clone failed');
   }
   try {
-    const { stdout } = await execFileAsync(
-      'git', ['-C', repoDir, 'show', `${ref}:${filePath}`],
-      { timeout: 10000, encoding: 'buffer', maxBuffer: 10 * 1024 * 1024 },
-    );
-    return { status: 'ok', content: stdout };
-  } catch {
-    return { status: 'path-not-found' };
+    await rename(tmp, dest);
+  } catch (err) {
+    await rm(tmp, { recursive: true, force: true });
+    throw new Error('clone finalize failed');
   }
 }
 
@@ -128,10 +168,16 @@ export async function gitShow(repoDir, branch, filePath) {
 // Request handler
 // ---------------------------------------------------------------------------
 //
-// deps = { config, cacheGet, cacheSet, gitShow, ensureRepo, log }
+// deps = { config, cacheGet, cacheSet, git, gitShow, ensureRepo, log }
+
+function sendErrorPage(res, kind, ctx) {
+  const { status, contentType, body } = renderErrorPage(kind, ctx);
+  res.writeHead(status, { 'Content-Type': contentType });
+  return res.end(body);
+}
 
 export async function handleRequest(req, res, deps) {
-  const { config, cacheGet, cacheSet, gitShow: gitShowFn, ensureRepo, log: logFn = log } = deps;
+  const { config, cacheGet, cacheSet, git, gitShow: gitShowFn, ensureRepo, log: logFn = log } = deps;
   const start = Date.now();
   const url = new URL(req.url, 'http://_');
 
@@ -147,46 +193,78 @@ export async function handleRequest(req, res, deps) {
   }
 
   const { repo, branch, filePath } = parsed;
-  // ensureRepo resolves a repo name to an on-disk dir (no-op/identity for now;
-  // on-demand clone arrives in a later task). Returns null/undefined if unknown.
-  const repoDir = await ensureRepo(repo, branch);
-  if (!repoDir) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    return res.end(`repo not configured: ${repo}\n`);
-  }
-  if (!safeComponent(repo) || !safeComponent(branch) || filePath.includes('..')) {
+
+  // SECURITY: validate repo + branch + path BEFORE touching ensureRepo, so an
+  // unsafe repo name can never reach the clone URL / on-disk path. (Ordering
+  // fix carried from the Task 1 review.) isValidRepoName is the stricter gate
+  // for the repo name (it becomes part of the clone URL + cache dir).
+  if (!isValidRepoName(repo) || !safeComponent(repo) || !safeComponent(branch) || filePath.includes('..')) {
     res.writeHead(400, { 'Content-Type': 'text/plain' });
     return res.end('unsafe path component\n');
   }
 
-  const cacheKey = `${repo}|${branch}|${filePath}`;
-  let content = cacheGet(cacheKey);
-  let cached = true;
-
-  if (content === null) {
-    cached = false;
-    const r = await gitShowFn(repoDir, branch, filePath);
-    if (r.status === 'branch-not-found') {
-      logFn('info', 'branch not found', { repo, branch, durMs: Date.now() - start });
-      res.writeHead(410, { 'Content-Type': 'text/plain' });
-      return res.end(`branch '${branch}' not found (may have merged; try main URL)\n`);
+  // Resolve repo → on-disk dir (on-demand clone). Map provision error codes to
+  // friendly pages; ANY unexpected error → 503 (never 500/crash — M2).
+  let repoDir;
+  try {
+    repoDir = await ensureRepo(repo, branch);
+  } catch (err) {
+    if (err && (err.code === 'INVALID_NAME' || err.code === 'NOT_IN_SCOPE')) {
+      logFn('info', 'repo not in scope', { repo, code: err.code, durMs: Date.now() - start });
+      return sendErrorPage(res, 'not-in-scope', { repo });
     }
-    if (r.status === 'path-not-found') {
-      logFn('info', 'path not found', { repo, branch, filePath, durMs: Date.now() - start });
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      return res.end(`path not in branch: ${filePath}\n`);
-    }
-    content = r.content;
-    cacheSet(cacheKey, content);
+    // TOKEN_FAILED and anything else unexpected → transient 503 (no token/url logged).
+    logFn('warn', 'ensureRepo failed', { repo, code: err && err.code, durMs: Date.now() - start });
+    return sendErrorPage(res, 'service-unavailable', {});
+  }
+  if (!repoDir) {
+    // Defensive: a dep that resolves falsy means "not resolvable" → not-in-scope.
+    return sendErrorPage(res, 'not-in-scope', { repo });
   }
 
+  const cacheKey = `${repo}|${branch}|${filePath}`;
+  const cachedContent = cacheGet(cacheKey);
+  if (cachedContent !== null) {
+    const mime = MIME[extname(filePath).toLowerCase()] || 'application/octet-stream';
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': `private, max-age=${Math.floor(config.cacheTtlMs / 1000)}`,
+    });
+    res.end(cachedContent);
+    logFn('info', 'served', { repo, branch, filePath, bytes: cachedContent.length, cached: true, durMs: Date.now() - start });
+    return;
+  }
+
+  let r;
+  try {
+    r = await gitShowFn({ repoDir, branch, filePath, git, defaultFallback: config.defaultBranch });
+  } catch (err) {
+    // git plumbing blew up unexpectedly → transient 503, never a 500/crash.
+    logFn('warn', 'gitShow failed', { repo, branch, filePath, durMs: Date.now() - start });
+    return sendErrorPage(res, 'service-unavailable', {});
+  }
+
+  if (r.status === 'gone-unmerged') {
+    logFn('info', 'gone unmerged', { repo, branch, durMs: Date.now() - start });
+    // DO NOT cache: branch may reappear / be re-pushed.
+    return sendErrorPage(res, 'gone-unmerged', { repo, branch });
+  }
+  if (r.status === 'path-not-found') {
+    logFn('info', 'path not found', { repo, branch, filePath, durMs: Date.now() - start });
+    // DO NOT cache: a transient miss must not pin a 404.
+    return sendErrorPage(res, 'path-not-found', { filePath });
+  }
+
+  // r.status === 'ok' — cache ONLY successful responses.
+  const content = r.content;
+  cacheSet(cacheKey, content);
   const mime = MIME[extname(filePath).toLowerCase()] || 'application/octet-stream';
   res.writeHead(200, {
     'Content-Type': mime,
     'Cache-Control': `private, max-age=${Math.floor(config.cacheTtlMs / 1000)}`,
   });
   res.end(content);
-  logFn('info', 'served', { repo, branch, filePath, bytes: content.length, cached, durMs: Date.now() - start });
+  logFn('info', 'served', { repo, branch, filePath, servedFrom: r.servedFrom, bytes: content.length, cached: false, durMs: Date.now() - start });
 }
 
 // ---------------------------------------------------------------------------
@@ -205,16 +283,66 @@ export function buildDefaultDeps(config) {
     cache.set(k, { content, expiresAt: Date.now() + config.cacheTtlMs });
   };
 
-  // Placeholder ensureRepo: resolve via the static config.repos map only.
-  // On-demand cloning is added in a later task.
-  const ensureRepo = async (repo) => config.repos.get(repo) || null;
+  const git = realGit;
+  const gitClone = realGitClone;
 
-  return { config, cacheGet, cacheSet, gitShow, ensureRepo, log };
+  // GitHub App token provider — only wired when App creds are configured.
+  // Without it, getToken() rejects → ensureRepo maps to TOKEN_FAILED → 503
+  // (never a crash). Full env validation lands in Task 9.
+  let getToken;
+  if (config.app) {
+    const provider = createTokenProvider({
+      appId: config.app.appId,
+      privateKeyPem: config.app.privateKeyPem,
+      installationId: config.app.installationId,
+    });
+    getToken = () => provider.getToken();
+  } else {
+    getToken = async () => { throw new Error('GitHub App credentials not configured'); };
+  }
+
+  // Real on-demand clone: org-wide, validated, atomic.
+  const ensureRepo = (repo) => realEnsureRepo(repo, {
+    cacheDir: config.cacheDir,
+    org: config.org,
+    getToken,
+    gitClone,
+    isValidRepoName,
+  });
+
+  return { config, cacheGet, cacheSet, git, gitClone, getToken, gitShow: realGitShow, ensureRepo, log };
 }
 
 // ---------------------------------------------------------------------------
 // App factory
 // ---------------------------------------------------------------------------
+
+// Enumerate fully-cloned repos in the cache dir (a present `.git` ⇒ the atomic
+// rename completed). In-flight clones live in `.tmp-*` siblings with no `.git`
+// at the canonical path, so this rule naturally skips them — no extra
+// coordination with provision.mjs needed.
+function listClonedRepos(cacheDir) {
+  let entries;
+  try {
+    entries = readdirSync(cacheDir, { withFileTypes: true });
+  } catch {
+    return []; // cache dir not created yet → nothing to fetch
+  }
+  return entries
+    .filter((e) => e.isDirectory() && !e.name.includes('.tmp-'))
+    .map((e) => join(cacheDir, e.name))
+    .filter((dir) => existsSync(join(dir, '.git')));
+}
+
+async function gitFetch(dir, logFn = log) {
+  try {
+    await execFileAsync('git', ['-C', dir, 'fetch', '--all', '--prune', '--quiet'], { timeout: 30000 });
+  } catch {
+    // Never log the error (could echo a token-bearing remote URL). The dir alone
+    // is safe to surface.
+    logFn('warn', 'git fetch failed', { dir });
+  }
+}
 
 export function createApp(deps) {
   const { config, log: logFn = log } = deps;
@@ -222,22 +350,22 @@ export function createApp(deps) {
 
   const server = createServer((req, res) => handleRequest(req, res, deps));
 
+  // Refresh the DYNAMIC set of cloned repos (not the old static map): fetch every
+  // fully-cloned dir under config.cacheDir, pruning deleted branches so merged/
+  // closed branch URLs fall back to default / 410 as appropriate.
   async function refreshAll() {
-    await Promise.all([...config.repos].map(([n, d]) => gitFetch(n, d, logFn)));
+    const dirs = listClonedRepos(config.cacheDir);
+    await Promise.all(dirs.map((dir) => gitFetch(dir, logFn)));
   }
 
   function start() {
-    if (config.repos.size === 0) {
-      logFn('error', 'SPEC_PREVIEW_REPOS env var required');
-      logFn('error', 'Example: SPEC_PREVIEW_REPOS="facio-blueprint:/var/lib/specs/facio-blueprint"');
-      process.exit(2);
-    }
     fetchTimer = setInterval(refreshAll, config.fetchIntervalMs);
     refreshAll();
     server.listen(config.port, () => {
       logFn('info', 'listening', {
         port: config.port,
-        repos: [...config.repos.keys()],
+        org: config.org,
+        cacheDir: config.cacheDir,
         fetchIntervalMs: config.fetchIntervalMs,
         cacheTtlMs: config.cacheTtlMs,
       });
