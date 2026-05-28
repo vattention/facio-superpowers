@@ -58,6 +58,27 @@ test('gitShow: Buffer content served unchanged', async () => {
   assert.deepEqual(r.content, buf);
 });
 
+// Fix B: gitShow accepts an injectable resolveDefault (server memoizes it). When
+// the branch is gone, gitShow must call the injected resolver instead of always
+// re-spawning symbolic-ref via the default resolveDefaultBranch.
+test('gitShow: branch gone → uses injected resolveDefault (not the built-in)', async () => {
+  let injectedCalls = 0;
+  let symbolicRefSpawns = 0;
+  const git = async (args) => {
+    if (args[0] === '-C') args = args.slice(2);
+    if (args[0] === 'symbolic-ref') { symbolicRefSpawns++; return { code: 0, stdout: 'refs/remotes/origin/main\n' }; }
+    if (args[0] === 'rev-parse') return { code: args[2] === 'origin/main' ? 0 : 1, stdout: '' };
+    if (args[0] === 'show') return { code: 0, stdout: 'MERGED' };
+    return { code: 1, stdout: '' };
+  };
+  const resolveDefault = async ({ fallback }) => { injectedCalls++; return 'main'; };
+  const r = await gitShow({ repoDir: '/r', branch: 'feat/x', filePath: 'spec.html', git, resolveDefault });
+  assert.equal(r.status, 'ok');
+  assert.equal(r.servedFrom, 'default');
+  assert.equal(injectedCalls, 1, 'injected resolveDefault must be used');
+  assert.equal(symbolicRefSpawns, 0, 'built-in symbolic-ref must NOT be spawned when resolveDefault injected');
+});
+
 test('resolveDefaultBranch: parses symbolic-ref', async () => {
   const git = fakeGit(new Set(), {});
   const def = await resolveDefaultBranch({ repoDir: '/r', git });

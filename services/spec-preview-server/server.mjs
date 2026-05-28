@@ -25,7 +25,7 @@ import { extname, join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
 
-import { gitShow as realGitShow } from './git-show.mjs';
+import { gitShow as realGitShow, resolveDefaultBranch as realResolveDefaultBranch } from './git-show.mjs';
 import { ensureRepo as realEnsureRepo } from './provision.mjs';
 import { createTokenProvider, isValidRepoName } from './github-app.mjs';
 import { renderErrorPage } from './error-page.mjs';
@@ -122,8 +122,11 @@ export function parseRequest(pathname) {
 // git helpers (production dep implementations live in buildDefaultDeps)
 // ---------------------------------------------------------------------------
 
-// git(args) → { code, stdout:Buffer }. Resolves on BOTH success and non-zero
-// exit (gitShow/resolveDefaultBranch discriminate on the exit code, never throw).
+// git(args) → { code, stdout:Buffer }. Resolves on BOTH success and a non-zero
+// git EXIT (gitShow/resolveDefaultBranch discriminate on the exit code, never
+// throw). A SPAWN failure (binary missing/unexecutable) is NOT a git exit — it
+// must propagate so the handler can surface a 503 instead of masquerading as a
+// "ref absent" 410 (which would silently hide a broken deploy).
 async function realGit(args) {
   try {
     const { stdout } = await execFileAsync('git', args, {
@@ -132,9 +135,16 @@ async function realGit(args) {
     });
     return { code: 0, stdout };
   } catch (err) {
-    // Non-zero exit (e.g. unknown ref / missing path) is an expected signal, not
-    // a crash. Surface the code; never propagate stderr (it may echo a ref/path).
-    return { code: typeof err.code === 'number' ? err.code : 1, stdout: Buffer.alloc(0) };
+    // A real non-zero git exit carries a NUMERIC err.code (e.g. 1 unknown ref,
+    // 128 bad object). That is an expected signal — surface it; never propagate
+    // stderr (it may echo a ref/path).
+    if (typeof err.code === 'number') {
+      return { code: err.code, stdout: Buffer.alloc(0) };
+    }
+    // Otherwise this is a SPAWN failure: err.code is a string ('ENOENT' git not
+    // found, 'EACCES' not executable) or absent. Rethrow so handleRequest maps
+    // it to a transient 503 rather than a friendly-but-wrong 410.
+    throw err;
   }
 }
 
@@ -310,7 +320,22 @@ export function buildDefaultDeps(config) {
     isValidRepoName,
   });
 
-  return { config, cacheGet, cacheSet, git, gitClone, getToken, gitShow: realGitShow, ensureRepo, log };
+  // Memoize the resolved default branch per repoDir. Durable post-merge links
+  // (branch gone → served from default) are the steady-state common case, so
+  // without this each such request re-spawns `git symbolic-ref`. The default
+  // branch of a repo is effectively immutable for the process lifetime, so a
+  // per-repoDir cache is safe. A clone-cache prune (deleting a repoDir) is a
+  // restart-class event, so we don't bother invalidating on disk changes.
+  const defaultBranchMemo = new Map(); // repoDir → resolved default branch name
+  const memoizedResolveDefault = async ({ repoDir, git: g, fallback }) => {
+    if (defaultBranchMemo.has(repoDir)) return defaultBranchMemo.get(repoDir);
+    const def = await realResolveDefaultBranch({ repoDir, git: g, fallback });
+    defaultBranchMemo.set(repoDir, def);
+    return def;
+  };
+  const gitShow = (params) => realGitShow({ ...params, resolveDefault: memoizedResolveDefault });
+
+  return { config, cacheGet, cacheSet, git, gitClone, getToken, gitShow, ensureRepo, log };
 }
 
 // ---------------------------------------------------------------------------

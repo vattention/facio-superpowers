@@ -154,9 +154,12 @@ test('integration: delete feat/x on origin + re-fetch → 200 merged (default) c
 
   const fixtureByRepo = { 'repo-merged': localOrigin };
   const deps = (() => {
-    // TTL 0 so the post-merge request genuinely re-runs gitShow (a cached ok would
-    // mask a broken default-branch fallback). A 200 here therefore PROVES fallback.
-    const config = { ...loadConfig({}), org: 'vattention', cacheDir, defaultBranch: 'main', cacheTtlMs: 0 };
+    // TTL -1 forces expiresAt < now on every read (Date.now() > expiresAt always
+    // true), so a cached entry is NEVER served stale and the post-merge request
+    // genuinely re-runs gitShow. (TTL 0 is not enough: a same-millisecond read
+    // can still satisfy Date.now() <= expiresAt and hit the cache.) A cached ok
+    // here would mask a broken default-branch fallback, so a 200 PROVES fallback.
+    const config = { ...loadConfig({}), org: 'vattention', cacheDir, defaultBranch: 'main', cacheTtlMs: -1 };
     const base = buildDefaultDeps(config);
     const ensure = (repo) => ensureRepo(repo, {
       cacheDir, org: config.org, getToken: async () => 't',
@@ -203,9 +206,11 @@ test('integration: spec only on feat/x, deleted, not on main → 410 gone-unmerg
   G(work, 'add', '.'); G(work, 'commit', '-q', '-m', 'feat'); G(work, 'push', '-q', 'origin', 'feat/x');
 
   const fixtureByRepo = { 'repo-unmerged': localOrigin };
-  // TTL 0 so the post-delete request re-runs gitShow instead of serving a stale
-  // cached ok. (The cache-only-ok contract is exercised by a dedicated test.)
-  const config = { ...loadConfig({}), org: 'vattention', cacheDir, defaultBranch: 'main', cacheTtlMs: 0 };
+  // TTL -1 forces expiresAt < now on every read (never serves stale), so the
+  // post-delete request re-runs gitShow instead of serving a stale cached ok.
+  // (TTL 0 is insufficient: a same-millisecond read can still hit the cache.)
+  // The cache-only-ok contract is exercised by a dedicated test.
+  const config = { ...loadConfig({}), org: 'vattention', cacheDir, defaultBranch: 'main', cacheTtlMs: -1 };
   const base = buildDefaultDeps(config);
   const ensure = (repo) => ensureRepo(repo, {
     cacheDir, org: config.org, getToken: async () => 't',
@@ -266,6 +271,76 @@ test('integration: getToken throws → 503 service-unavailable page (no crash)',
   assert.equal(res.statusCode, 503);
   assert.match(res.headers['Content-Type'], /text\/html/);
   assert.match(res.body, /服务暂时|不可用/);
+});
+
+test('integration: git binary spawn failure (git runner rejects) → 503, NOT 410/crash', async () => {
+  // Fix A: when `git` cannot be spawned (ENOENT/EACCES), realGit rethrows rather
+  // than reporting a fake non-zero exit. gitShow propagates the throw, and the
+  // handler maps it to a transient 503 — never a friendly-but-wrong 410 that
+  // would mask a broken deploy, and never a 500/crash.
+  const config = { ...loadConfig({}), org: 'vattention', cacheDir, defaultBranch: 'main' };
+  const base = buildDefaultDeps(config);
+  // ensureRepo resolves to a real cloned dir so we reach the gitShow call;
+  // the injected `git` runner then simulates the missing binary by rejecting.
+  const fixtureByRepo = { 'facio-blueprint': originDir };
+  const ensure = (repo) => ensureRepo(repo, {
+    cacheDir, org: config.org, getToken: async () => 't',
+    gitClone: localGitClone(fixtureByRepo), isValidRepoName,
+  });
+  const enoent = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' });
+  const git = async () => { throw enoent; };
+  const deps = { ...base, config, git, gitShow: realGitShow, ensureRepo: ensure };
+
+  const res = mockRes();
+  await handleRequest(mockReq('/facio-blueprint/feat/x/docs/spec.html'), res, deps);
+  assert.equal(res.statusCode, 503, 'git spawn failure must surface as 503, not 410/200/500');
+  assert.match(res.headers['Content-Type'], /text\/html/);
+  assert.match(res.body, /服务暂时|不可用/);
+});
+
+test('integration: default branch resolution memoized once across repeated branch-gone requests', async () => {
+  // Fix B: durable post-merge links (branch gone → served from default) are the
+  // steady-state common case. The memoized resolver wired in buildDefaultDeps
+  // must spawn `symbolic-ref` only ONCE per repoDir, no matter how many
+  // branch-gone requests arrive.
+  const localOrigin = join(root, 'origin-memo.git');
+  const work = join(root, 'work-memo');
+  G(root, 'init', '--bare', '-b', 'main', localOrigin);
+  G(root, 'clone', '--quiet', localOrigin, work);
+  G(work, 'config', 'user.email', 'test@example.com');
+  G(work, 'config', 'user.name', 'Test');
+  mkdirSync(join(work, 'docs'), { recursive: true });
+  writeFileSync(join(work, 'docs', 'spec.html'), '<h1>MEMO main</h1>');
+  G(work, 'add', '.'); G(work, 'commit', '-q', '-m', 'main'); G(work, 'push', '-q', 'origin', 'main');
+
+  const fixtureByRepo = { 'repo-memo': localOrigin };
+  // cacheTtlMs -1 → never serve stale; each request genuinely re-runs gitShow.
+  const config = { ...loadConfig({}), org: 'vattention', cacheDir, defaultBranch: 'main', cacheTtlMs: -1 };
+  const base = buildDefaultDeps(config); // base.git === realGit, base.gitShow === memoized wrapper
+
+  // count actual `symbolic-ref` spawns by wrapping the real git runner
+  let symbolicRefCalls = 0;
+  const countingGit = async (args) => {
+    if (args.includes('symbolic-ref')) symbolicRefCalls++;
+    return base.git(args);
+  };
+  const ensure = (repo) => ensureRepo(repo, {
+    cacheDir, org: config.org, getToken: async () => 't',
+    gitClone: localGitClone(fixtureByRepo), isValidRepoName,
+  });
+  // Use the memoized gitShow wrapper from buildDefaultDeps, but inject the
+  // counting git so the wrapper's underlying symbolic-ref spawns are observable.
+  const deps = { ...base, config, git: countingGit, ensureRepo: ensure };
+
+  // feat/x never existed on this origin → every request is branch-gone → falls
+  // back to default. Fire several requests for the SAME repoDir.
+  for (let i = 0; i < 4; i++) {
+    const res = mockRes();
+    await handleRequest(mockReq('/repo-memo/feat/x/docs/spec.html'), res, deps);
+    assert.equal(res.statusCode, 200, `request ${i} should serve default-branch copy`);
+    assert.match(res.body, /MEMO main/);
+  }
+  assert.equal(symbolicRefCalls, 1, 'symbolic-ref must be spawned ONCE per repoDir (memoized)');
 });
 
 test('integration: /healthz still plain ok', async () => {

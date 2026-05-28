@@ -6,7 +6,7 @@ export async function resolveDefaultBranch({ repoDir, git, fallback = 'main' }) 
   return fallback;
 }
 
-export async function gitShow({ repoDir, branch, filePath, git, defaultFallback = 'main' }) {
+export async function gitShow({ repoDir, branch, filePath, git, defaultFallback = 'main', resolveDefault = resolveDefaultBranch }) {
   // refExists / found derive from git EXIT CODES — never from typeof content.
   // (prod content is a Buffer; a typeof-string check would misclassify EVERY file.)
   const tryRef = async (ref) => {
@@ -24,7 +24,8 @@ export async function gitShow({ repoDir, branch, filePath, git, defaultFallback 
       : { status: 'path-not-found' };
   }
   // Branch ref is gone (merged+deleted, or closed-unmerged) → fall back to default branch.
-  const def = await resolveDefaultBranch({ repoDir, git, fallback: defaultFallback });
+  // resolveDefault is injectable (server memoizes it per repoDir); defaults to the real one.
+  const def = await resolveDefault({ repoDir, git, fallback: defaultFallback });
   const onDefault = await tryRef(`origin/${def}`);
   if (onDefault.found) return { status: 'ok', servedFrom: 'default', content: onDefault.content };
   return { status: 'gone-unmerged' };
