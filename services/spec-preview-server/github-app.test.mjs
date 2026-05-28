@@ -47,3 +47,22 @@ test('createTokenProvider: surfaces API failure', async () => {
   const provider = createTokenProvider({ appId: '1', privateKeyPem: PEM, installationId: '99', fetchImpl });
   await assert.rejects(() => provider.getToken(), /401/);
 });
+
+test('createTokenProvider: retries after a failed mint (no poisoned cache)', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    if (calls === 1) return { ok: false, status: 500, text: async () => 'boom' };
+    return { ok: true, status: 201, json: async () => ({ token: 'good', expires_at: new Date(Date.now() + 3600_000).toISOString() }) };
+  };
+  const provider = createTokenProvider({ appId: '1', privateKeyPem: PEM, installationId: '99', fetchImpl });
+  await assert.rejects(() => provider.getToken(), /500/);   // first mint fails
+  assert.equal(await provider.getToken(), 'good');           // retries, succeeds
+  assert.equal(calls, 2);
+});
+
+test('createTokenProvider: malformed mint response throws (not cached)', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 201, json: async () => ({ token: 'x' /* no expires_at */ }) });
+  const provider = createTokenProvider({ appId: '1', privateKeyPem: PEM, installationId: '99', fetchImpl });
+  await assert.rejects(() => provider.getToken(), /malformed/);
+});

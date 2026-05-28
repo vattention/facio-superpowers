@@ -24,7 +24,11 @@ export function createTokenProvider({ appId, privateKeyPem, installationId, fetc
     });
     if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`);
     const body = await res.json();
-    cached = { token: body.token, expSec: Math.floor(new Date(body.expires_at).getTime() / 1000) };
+    const expSec = Math.floor(new Date(body.expires_at).getTime() / 1000);
+    if (!body.token || Number.isNaN(expSec)) {
+      throw new Error('installation token mint: malformed response');
+    }
+    cached = { token: body.token, expSec };
     return cached.token;
   }
   return {
