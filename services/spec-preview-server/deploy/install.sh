@@ -128,7 +128,10 @@ echo "✓ wrote env → $ENV_FILE (chmod 600)"
 # ---------------------------------------------------------------------------
 cp "$SCRIPT_DIR/../systemd/spec-preview-server.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now spec-preview-server
+systemctl enable spec-preview-server
+# restart (not just `enable --now`): on a re-deploy the service is already running,
+# and `enable --now` would NOT reload the new code — restart picks up /opt changes.
+systemctl restart spec-preview-server
 
 # ---------------------------------------------------------------------------
 # 7. Verify

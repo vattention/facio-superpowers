@@ -233,6 +233,7 @@ test('integration: spec only on feat/x, deleted, not on main → 410 gone-unmerg
   assert.equal(r2.statusCode, 410);
   assert.match(res2Type(r2), /text\/html/);
   assert.match(r2.body, /链接已失效|不存在/);  // gone-unmerged friendly page
+  assert.equal(r2.headers['Cache-Control'], 'no-store');  // errors must not be edge-cached
 });
 function res2Type(r) { return r.headers['Content-Type'] || r.headers['content-type'] || ''; }
 
