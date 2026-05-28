@@ -131,7 +131,7 @@ export async function gitShow(repoDir, branch, filePath) {
 // deps = { config, cacheGet, cacheSet, gitShow, ensureRepo, log }
 
 export async function handleRequest(req, res, deps) {
-  const { config, cacheGet, cacheSet, gitShow: gitShowFn, ensureRepo, log: logFn } = deps;
+  const { config, cacheGet, cacheSet, gitShow: gitShowFn, ensureRepo, log: logFn = log } = deps;
   const start = Date.now();
   const url = new URL(req.url, 'http://_');
 
