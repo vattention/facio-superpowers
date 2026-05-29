@@ -52,7 +52,10 @@ Triggered by any of:
     halt with explanation. M4b backlog evaluates either (a) facio-flow store
     extends to accept `decided`, or (b) promote skill auto-`reopen` (transition
     decided → open) before append+cancel.
-- Target repo has Harness scaffold (cwd has `docs/superpowers/specs/` dir)
+- Target repo allows spec-author to resolve a spec directory from host rules:
+  `.harness/config.env` `FACIO_SPEC_DIR`, `AGENTS.md`, `docs/README.md`,
+  an existing `docs/specs/` / `specs/` / `docs/superpowers/specs/`, or the
+  documented fallback.
 
 ## Process
 
@@ -97,9 +100,10 @@ context-bridge marker (passed via conversation context) and skip Step 1
 brainstorming wrap (intent already clarified). spec-author Step 2 then uses the
 pre-populated material as the seed for §1-§3 drafting.
 
-**Spec stub path**: `docs/superpowers/specs/<YYYY-MM-DD>-<context_slug>.md` where
-`<context_slug>` is derived from `context.goal` (snake-case-to-kebab,
-max 40 chars).
+**Spec stub path**: `$SPEC_DIR/<YYYY-MM-DD>-<context_slug>.md`, where
+`SPEC_DIR` is resolved by spec-author from the host repo rules and
+`<context_slug>` is derived from `context.goal` (snake-case-to-kebab, max 40
+chars).
 
 If spec-author fails (validation error, user abort, etc.) → halt; do NOT execute
 Step 4 (don't pollute the context with PROMOTED marker if the spec doesn't exist).

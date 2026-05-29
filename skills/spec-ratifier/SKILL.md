@@ -105,8 +105,24 @@ You MUST create a TodoWrite task for each step:
 
 ```bash
 # Run from product repo root
-# Replace <slug> with the actual spec filename (e.g. 2026-05-20-foo-bar.md)
-SPEC=docs/superpowers/specs/<slug>.md
+# Prefer an explicit SPEC_PATH from the caller. Otherwise resolve the host
+# repo's spec directory the same way spec-author does.
+if [ -n "${SPEC_PATH:-}" ]; then
+  SPEC="$SPEC_PATH"
+else
+  [ -f .harness/config.env ] && set -a && . .harness/config.env && set +a
+  SPEC_DIR="${FACIO_SPEC_DIR:-}"
+  if [ -z "$SPEC_DIR" ]; then
+    for candidate in docs/specs specs docs/superpowers/specs; do
+      if [ -d "$candidate" ]; then
+        SPEC_DIR="$candidate"
+        break
+      fi
+    done
+  fi
+  SPEC_DIR="${SPEC_DIR:-docs/superpowers/specs}"
+  SPEC="$SPEC_DIR/<slug>.md"
+fi
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 [ "$BRANCH" = "main" ] && { echo "✗ refusing to operate on main"; exit 1; }
 
@@ -153,7 +169,8 @@ CURRENT_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')
 [ "$REVIEW_SHA" = "$CURRENT_SHA" ] || \
   { echo "✗ self-review stale — re-run Step 15"; exit 1; }
 
-# Auto-source committed harness env defaults
+# Auto-source committed harness env defaults. FACIO_SPEC_DIR is also honored by
+# Step 0 when SPEC_PATH is not supplied.
 [ -f .harness/config.env ] && set -a && . .harness/config.env && set +a
 if [ -z "$FACIO_LARK_WEBHOOK_URL" ]; then
   echo "✗ FACIO_LARK_WEBHOOK_URL not set — see .harness/README.md → Lark webhook 配置"

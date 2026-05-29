@@ -7,7 +7,7 @@ description: 重路径主入口 — 起草 L2 三视角 spec（产品/设计/研
 
 **Announce at start:** "I'm using the spec-author skill to draft an L2 per-change spec."
 
-spec-author 把一个具体变更 idea 落成可被 spec-ratifier 评审、被 writing-plans 消费的结构化 L2 spec。产物 = `docs/superpowers/specs/<YYYY-MM-DD>-<slug>.md`（dual-artifact，同步生成 `.html`）。
+spec-author 把一个具体变更 idea 落成可被 spec-ratifier 评审、被 writing-plans 消费的结构化 L2 spec。产物写入宿主 repo 解析出的 `$SPEC_DIR/<YYYY-MM-DD>-<slug>.md`（dual-artifact，同步生成 `.html`）。
 
 ## When to use this skill
 
@@ -51,6 +51,35 @@ You MUST create a TodoWrite task for each step and complete in order:
 
 After Step 15, hint chain to **spec-ratifier**. Do NOT chain to writing-plans 
 (that happens via Flow Skill HARD-GATE only after status = `ratified`).
+
+## Path Resolution · Host Repo Rules First
+
+Before Step 0, resolve the host repo root and bind `SPEC_DIR`. All later steps
+MUST use `$SPEC_DIR/<YYYY-MM-DD>-<slug>.md`; do not write directly to
+`docs/superpowers/specs/` unless resolution falls back there.
+
+Resolution order:
+
+1. Find host root with `git rev-parse --show-toplevel` from the current cwd /
+   target repo. If the user supplied a target repo, run resolution there.
+2. If `.harness/config.env` defines `FACIO_SPEC_DIR`, use that relative path.
+3. Read host documentation rules first: `AGENTS.md`, `CLAUDE.md`, `docs/README.md`,
+   and relevant directory READMEs. If they explicitly name a current spec
+   location, use that. Project rules override the superpowers harness default.
+4. If no explicit rule exists, prefer an existing repo-local spec directory in
+   this order: `docs/specs/`, `specs/`, `docs/superpowers/specs/`.
+5. If still unresolved, fallback to `docs/superpowers/specs/` and say so in the
+   chat output.
+
+Record the chosen path once:
+
+```bash
+SPEC_DIR="<resolved-relative-dir>"
+SPEC="$SPEC_DIR/<YYYY-MM-DD>-<slug>.md"
+```
+
+When the host rule is product-scoped, such as `{product}/specs/`, substitute the
+Flow context product id before writing. Create `$SPEC_DIR` if it does not exist.
 
 ## Step 0 · Knowledge Catalog Query
 
@@ -99,7 +128,7 @@ else:
 
 1. invoke Skill(brainstorming)
 2. brainstorming 完成后会说 "I'm using the writing-plans skill" / "invoke writing-plans" —— **忽略**
-3. 收集 brainstorming 产出的 design doc（在 `docs/superpowers/specs/<date>-<topic>-design.md`）
+3. 收集 brainstorming 产出的 design doc（在 `$SPEC_DIR/<date>-<topic>-design.md`）
 4. 回到本 skill Step 2，把 design doc 拆解成 L2 三视角：
    - design doc → §1 产品视角（"产品逻辑" + "用户旅程"）
    - design doc 的"approaches/trade-offs" → §3 研发视角"技术架构"
@@ -168,7 +197,7 @@ Tier 决定后续作用（spec §7.2）：评审 owner 数 / iteration 上限 / 
 
 ## Step 4 · Write spec.md (L2 Template)
 
-**Path:** `docs/superpowers/specs/<YYYY-MM-DD>-<slug>.md`（slug = kebab-case feature name）
+**Path:** `$SPEC_DIR/<YYYY-MM-DD>-<slug>.md`（slug = kebab-case feature name）
 
 **Full L2 template** (paste verbatim, fill `{placeholders}`):
 
@@ -385,20 +414,20 @@ L2 spec dual-artifact（spec §4.4）：spec.md 给 AI，spec.html 给人。spec
 **Command：**
 
 ```bash
-node scripts/generate-spec-html.mjs docs/superpowers/specs/<YYYY-MM-DD>-<slug>.md
+node scripts/generate-spec-html.mjs "$SPEC"
 ```
 
-**Output：** `docs/superpowers/specs/<YYYY-MM-DD>-<slug>.html` （sibling）
+**Output：** `$SPEC_DIR/<YYYY-MM-DD>-<slug>.html` （sibling）
 
 **Verify：**
 
 ```bash
 # 1. file exists
-test -f docs/superpowers/specs/<slug>.html
+test -f "${SPEC%.md}.html"
 
 # 2. sha256 footer matches
-EXPECTED=$(shasum -a 256 docs/superpowers/specs/<slug>.md | awk '{print $1}')
-ACTUAL=$(grep -oE 'sha256: <code>[a-f0-9]{64}' docs/superpowers/specs/<slug>.html | awk -F'<code>' '{print $2}')
+EXPECTED=$(shasum -a 256 "$SPEC" | awk '{print $1}')
+ACTUAL=$(grep -oE 'sha256: <code>[a-f0-9]{64}' "${SPEC%.md}.html" | awk -F'<code>' '{print $2}')
 [ "$EXPECTED" = "$ACTUAL" ] && echo "✓ hash matches" || echo "✗ hash drift"
 ```
 
@@ -416,7 +445,7 @@ Run this checklist verbatim and output a pass/fail line per item to chat. Fix in
 
 ### Generic (1–4) — borrowed from brainstorming
 
-1. **Placeholder scan** — `grep -nE 'TBD|TODO|<.*>|占位|fill in' docs/superpowers/specs/<slug>.md` should return only intentional template markers
+1. **Placeholder scan** — `grep -nE 'TBD|TODO|<.*>|占位|fill in' "$SPEC"` should return only intentional template markers
 2. **Internal consistency** — §1 user journey 不与 §3 技术架构互相矛盾；§5 ADDED 与 §1 AC 对应
 3. **Scope check** — 是否 one focused change（不混 ≥2 个独立 capability）？若混 → 拆 spec
 4. **Ambiguity check** — 每条 AC / 每条 §5 Requirement 是否可被一句话测试？若模糊（如 "好用"）→ 改写
@@ -494,7 +523,7 @@ EOF
 ## After Step 15 · Hint Chain
 
 ```
-✓ L2 spec drafted: docs/superpowers/specs/<slug>.md
+✓ L2 spec drafted: $SPEC
 ✓ spec.html generated (dual-artifact synced)
 ✓ 15-item self-review: all PASS
 
