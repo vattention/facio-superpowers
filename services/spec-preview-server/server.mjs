@@ -34,13 +34,13 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { extname, join } from 'node:path';
+import { extname, join, basename } from 'node:path';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
 
 import { gitShow as realGitShow, resolveDefaultBranch as realResolveDefaultBranch } from './git-show.mjs';
 import { ensureRepo as realEnsureRepo } from './provision.mjs';
-import { createTokenProvider, isValidRepoName } from './github-app.mjs';
+import { createTokenProvider, isValidRepoName, buildCloneUrl } from './github-app.mjs';
 import { renderErrorPage } from './error-page.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -232,6 +232,17 @@ async function realGitClone(url, dest) {
     await rm(tmp, { recursive: true, force: true });
     throw new Error('clone finalize failed');
   }
+  // Strip the token from the persisted origin URL. The clone-time installation
+  // token expires in ~1h; if it stayed in .git/config, the background fetch would
+  // keep reusing the stale token and silently fail. gitFetch injects a FRESH token
+  // each cycle instead, so the stored remote stays token-less (also: no token at rest).
+  try {
+    const cleanUrl = url.replace(/\/\/[^/@]+@/, '//');
+    await execFileAsync('git', ['-C', dest, 'remote', 'set-url', 'origin', cleanUrl]);
+  } catch {
+    // Non-fatal: gitFetch fetches an explicit tokenized URL regardless of the
+    // stored remote, so a leftover token here would just be unused.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -421,12 +432,18 @@ function listClonedRepos(cacheDir) {
     .filter((dir) => existsSync(join(dir, '.git')));
 }
 
-async function gitFetch(dir, logFn = log) {
+// Background-refresh a single cached repo with a FRESH installation token.
+// We do NOT rely on the stored origin URL (its clone-time token expires ~1h);
+// instead we mint a current token per cycle and fetch an explicit tokenized URL,
+// updating + pruning origin's remote-tracking refs. exec is injectable for tests.
+export async function gitFetch(dir, { getToken, org, exec = execFileAsync, logFn = log }) {
   try {
-    await execFileAsync('git', ['-C', dir, 'fetch', '--all', '--prune', '--quiet'], { timeout: 30000 });
+    const repo = basename(dir);
+    const token = await getToken();
+    const url = buildCloneUrl({ org, repo, token });  // single source for the token-URL format
+    await exec('git', ['-C', dir, 'fetch', '--prune', '--quiet', url, '+refs/heads/*:refs/remotes/origin/*'], { timeout: 30000 });
   } catch {
-    // Never log the error (could echo a token-bearing remote URL). The dir alone
-    // is safe to surface.
+    // Never log the error or url (both can echo the token). The dir alone is safe.
     logFn('warn', 'git fetch failed', { dir });
   }
 }
@@ -442,7 +459,7 @@ export function createApp(deps) {
   // closed branch URLs fall back to default / 410 as appropriate.
   async function refreshAll() {
     const dirs = listClonedRepos(config.cacheDir);
-    await Promise.all(dirs.map((dir) => gitFetch(dir, logFn)));
+    await Promise.all(dirs.map((dir) => gitFetch(dir, { getToken: deps.getToken, org: config.org, logFn })));
   }
 
   function start() {

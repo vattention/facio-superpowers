@@ -201,6 +201,38 @@ The installation token is minted on demand and **auto-rotates** (re-minted ~5 mi
 sudo systemctl restart spec-preview-server
 ```
 
+### Auto-update (optional)
+
+By default, **deploying new server code is manual** (re-run `install.sh`). Routine
+spec authoring/review needs no deploy — the server clones on demand and
+background-fetches every 30s. Only changes to `services/spec-preview-server/**`
+require a redeploy, which is rare.
+
+If you want that rare redeploy automated, install the self-update timer. It pulls
+`main` on a schedule and, **only when the server's code changed**, refreshes the
+`/opt` modules and restarts the service. It does NOT touch credentials/env.
+
+```bash
+# one-time install (root, via SSM). REPO_DIR = your facio-superpowers checkout.
+REPO=/home/ssm-user/vattention/facio-superpowers
+sudo install -m 755 "$REPO/services/spec-preview-server/deploy/auto-update.sh" /opt/spec-preview-server/auto-update.sh
+sudo cp "$REPO"/services/spec-preview-server/systemd/spec-preview-server-update.{service,timer} /etc/systemd/system/
+# if your checkout path/owner differ from the defaults, set them on the unit:
+#   sudo systemctl edit spec-preview-server-update.service
+#   → [Service] Environment=REPO_DIR=...  Environment=REPO_OWNER=...
+sudo systemctl daemon-reload
+sudo systemctl enable --now spec-preview-server-update.timer
+systemctl list-timers spec-preview-server-update.timer   # verify scheduled
+```
+
+Trade-off: this is **auto-deploy** — a commit to `main` that touches the server
+reaches prod within one timer interval, with no human gate. Acceptable for an
+internal tool; if you'd rather keep an explicit gate, skip this and redeploy by hand.
+
+> Self-limitation: the updater refreshes only the `.mjs` modules. If `deploy/` or
+> `systemd/` (incl. `auto-update.sh` itself) changes upstream, it logs a NOTE and
+> you re-run `install.sh` / re-copy the units manually.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -237,3 +269,5 @@ Deploy:
 
 - `systemd/spec-preview-server.service` — unit file (runs as `specs`, hardened, EnvironmentFile)
 - `deploy/install.sh` — idempotent EC2 setup (flag-based: `--org --app-id --installation-id --private-key [--preseed]`)
+- `deploy/auto-update.sh` — optional self-update: pull `main`, redeploy only on server-code change + restart
+- `systemd/spec-preview-server-update.{service,timer}` — optional timer that runs `auto-update.sh`
