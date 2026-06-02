@@ -348,6 +348,26 @@ sequenceDiagram
 - `change_id` = filename without `.md`
 - `status: draft`（初始，spec-ratifier 后改 ratified）
 
+## 写人话 · Prose Discipline（默认全 spec，§3 / §6 是黑话高发区）
+
+L2 spec 是给人评审、给 AI 消费的文档，不是黑话竞赛。§1 产品视角通常天然说人话；
+**§3 研发视角 和 §6 Tier rationale 最容易堆术语** —— 起草这两节时强制三条：
+
+1. **中文优先；英文只在它承载中文给不出的精度时保留。** 真领域术语
+   （lint / schema / CI gate / eval / mermaid / token）保留；装饰性英文换回中文。
+   - ✗ `blast radius 接近破坏性 API 变更` → ✓ `影响范围接近破坏性 API 变更`
+   - ✗ `P4 严格 contingent on P3` → ✓ `P4 严格依赖 P3 完成`
+   - ✗ `ratifier 可据实下调` → ✓ `评审人可酌情下调`
+2. **内部缩写首次出现给一句话注解。** `AC` / `change-gate` / `ratifier` /
+   `L1·L2·L3` / `.harness/gates.json` 对没读过 harness 的人是路障 —— 第一次出现时
+   一句话说清它是什么，或在该节开头给一行术语表。
+   - ✗ `逐项过 change-gate` → ✓ `逐项过 change-gate（每次工具改动必须附治理工件的 CI 闸门）`
+3. **一套比喻够了。** 灰度 / 先软后硬 / 探针 / 种子机制 同段堆叠会陡增认知负担。
+   选一套贯穿（如相位 P0–P4），删掉多余隐喻。
+
+**判据：** 一个没读过本 harness 的资深工程师能不能一遍读懂 §3 和 §6？读不懂就是没过
+（self-review 第 4 项 b 强制检查）。
+
 ## Step 5 · Knowledge Extraction
 
 **Why：** spec 起草过程暴露的 decision / guideline / pitfall 应被抽到 `docs/reference/<type>/`，让下一条 spec 可在 Step 0 catalog 中找到（A5 决策 + spec §6.6 ARCHIVE）。
@@ -448,7 +468,9 @@ Run this checklist verbatim and output a pass/fail line per item to chat. Fix in
 1. **Placeholder scan** — `grep -nE 'TBD|TODO|<.*>|占位|fill in' "$SPEC"` should return only intentional template markers
 2. **Internal consistency** — §1 user journey 不与 §3 技术架构互相矛盾；§5 ADDED 与 §1 AC 对应
 3. **Scope check** — 是否 one focused change（不混 ≥2 个独立 capability）？若混 → 拆 spec
-4. **Ambiguity check** — 每条 AC / 每条 §5 Requirement 是否可被一句话测试？若模糊（如 "好用"）→ 改写
+4. **Ambiguity & 说人话 check** —
+   (a) 每条 AC / 每条 §5 Requirement 是否可被一句话测试？若模糊（如 "好用"）→ 改写；
+   (b) §3 / §6 是否说人话？无装饰性英文夹生、内部缩写首次出现有注解、同段比喻不超过一套（见上「写人话」节）。逐项扫到一处违反即 FAIL，改写后重扫。
 
 ### L2-specific (5–14)
 
@@ -482,7 +504,7 @@ Run this checklist verbatim and output a pass/fail line per item to chat. Fix in
  1. Placeholder scan         : PASS
  2. Internal consistency     : PASS
  3. Scope check              : PASS
- 4. Ambiguity check          : FAIL — AC-2 "好用" not testable → 改 (FIX inline)
+ 4. Ambiguity & 说人话 check  : FAIL — §3 "blast radius" 夹生 + AC-2 "好用" 不可测 → 改 (FIX inline)
  5. 三视角非空                : PASS
  ... (15 行)
 === summary: 14 PASS / 1 FAIL → 修复后 re-run ===
