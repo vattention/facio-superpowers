@@ -32,6 +32,28 @@ spec tier = Large（引入组织级读凭证）。已部署的 spec-preview-serv
 
 消费方（spec-ratifier 链路）无需改动；preview URL 构造不变。
 
+### Added — `flow` skill 飞书群同步（decide / close 时同步 spec 到飞书）
+
+flow 工作流在 `decide_context` / `close_context` 两个时机询问是否把 spec 同步到飞书群：同意则按章节模板提炼 markdown，调 `sync-to-feishu.sh` 创建/迭代同一份飞书 Doc（1 context = 1 doc）+ 推送群机器人卡片。(#22)
+
+- **NEW `skills/flow/sync-to-feishu.sh`**：读 webhook + `lark-cli doctor` 检查 + decide 用 `docs +create` / close 用 `docs +update --mode overwrite` + 极简卡片。
+- **webhook 配置以 `.harness/config.env` 团队共享文件为主路径**（对齐 spec-ratifier 范式与 `FACIO_LARK_WEBHOOK_URL` 变量名）；解析顺序 `--harness-config` > 向上查找 > 已 export env（file-wins）。个人 `~/.zshrc` export 降为公开仓库备选。多产品扩展 `FACIO_LARK_WEBHOOK_URL_<PRODUCT>`。
+- **接入流程**：项目 owner `init` 生成 config.env 骨架 → 编辑 commit push（私有仓）→ 同事 pull + `facio-superpowers sync` + `lark-cli auth login` 即用。
+- close 阶段实测 bug 修复：`lark-cli doctor` 不支持 `--jq`（改 python3 解析）；`docs +update` 空 `doc_url` 字段被 `read` trim 吃掉导致群卡片按钮 URL 失效（改两次独立 python 赋值）。
+
+### Fixed — skill spec 路径解析改读宿主 repo 规则
+
+`spec-author` / `spec-ratifier` / `promote_context_to_spec` 不再硬编 `docs/superpowers/specs/`，改为解析宿主 repo 规则（git root + `.harness/config.env` 的 `FACIO_SPEC_DIR` + AGENTS.md/CLAUDE.md/README 的显式声明），项目规则覆盖 harness 默认。新增 `tests/skill-docs/spec-path-contract.test.mjs` 契约测试。(78b3b06)
+
+### Fixed — `spec-author` 强制 §3 / §6 说人话
+
+`spec-author` 起草的 spec §3 研发视角 / §6 Tier rationale 容易堆黑话（装饰性中英夹生、未注解内部缩写、叠加比喻）。Step 4 新增「写人话」约束块（三条规则 + 真实 before/after），self-review 第 4 项从「可测试性」扩成「可测试性 + 说人话」进强制自检（不改 15 项总数）。(#27)
+
+### Fixed — `spec-preview-server` 部署后续修复
+
+- re-deploy 自动重启 + 错误响应加 `no-store`（避免浏览器缓存错误页）+ spec 状态 `spec → merged`。(#24)
+- post-deploy follow-ups：installation token 刷新 + 可选的 auto-update systemd timer（定时拉最新部署）。(#25)
+
 ---
 
 ## v2.6.2 (2026-05-25)
