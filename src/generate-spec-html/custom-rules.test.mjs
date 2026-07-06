@@ -77,3 +77,31 @@ test('§5 MODIFIED with real content → still gets .diff-modified', async () =>
   assert.match(html, /class="diff-modified"/);
   assert.doesNotMatch(html, /class="diff-none"/);
 });
+
+// Regression: a non-collapsible section AFTER a collapsible one must still close
+// its <h2> with </h2>, not leak </summary> from the collapsible section's state.
+// (Previously st.inCollapsible was set by §4 and never reset, corrupting §5+.)
+test('non-collapsible §5 after collapsible §4 closes h2 correctly', async () => {
+  const md = await createParser();
+  const html = md.render('## §4 Open Issues\n\n- foo\n\n## §5 L1 Impact\n\ncontent');
+  // §5 opens a <section>/<h2>, so it must NOT emit a stray </summary> for its heading.
+  const section5 = html.slice(html.indexOf('data-tag="§5"'));
+  assert.match(section5, /<h2[^>]*>[\s\S]*?<\/h2>/, '§5 heading should close with </h2>');
+  assert.doesNotMatch(section5.slice(0, section5.indexOf('</h2>')), /<\/summary>/,
+    '§5 heading must not close with </summary>');
+});
+
+// Regression: every opened section/details wrapper is closed (balanced tags).
+// Mirrors renderSpec()'s trailing-close step to close the last section.
+test('all section wrappers are balanced (opens === closes)', async () => {
+  const md = await createParser();
+  const env = {};
+  let html = md.render(
+    '## §1 产品视角\n\na\n\n## §4 Open Issues\n\n- b\n\n## §5 L1 Impact\n\nc',
+    env,
+  );
+  if (env._customRules?.openSection) html += env._customRules.openSection;
+  const count = (re) => (html.match(re) || []).length;
+  assert.equal(count(/<section class="section"/g), count(/<\/section>/g), 'section open/close balanced');
+  assert.equal(count(/<details class="section"/g), count(/<\/details>/g), 'details open/close balanced');
+});

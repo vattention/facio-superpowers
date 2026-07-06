@@ -9,16 +9,39 @@ const STATUS_COLOR = {
 const CSS = `
 :root { --bg:#fafaf9; --fg:#1c1917; --muted:#78716c; --border:#e7e5e4; --code-bg:#f5f5f4; }
 * { box-sizing: border-box; }
-body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 920px; margin: 2rem auto; padding: 0 1.5rem; background: var(--bg); color: var(--fg); }
-h1 { font-size: 2rem; margin-bottom: .25rem; }
-.meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; }
+body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 900px; margin: 1.5rem auto; padding: 0 1.5rem 4rem; background: var(--bg); color: var(--fg); }
+h1 { font-size: 1.7rem; margin-bottom: .5rem; }
+.meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
 .badge { display: inline-block; padding: .2rem .6rem; border-radius: 9999px; font-size: .85rem; color: white; font-weight: 600; }
-.section, details.section { margin: 2rem 0; padding: 1rem 1.25rem; background: white; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-.section h2, details.section summary { font-size: 1.4rem; padding-left: .75rem; cursor: pointer; }
+
+/* === Summary dashboard — at-a-glance chips === */
+.dashboard { display: flex; flex-wrap: wrap; gap: .4rem; align-items: stretch; margin: 0 0 1.75rem; padding: .55rem .7rem; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); font-size: .82rem; }
+.dashboard .chip { display: inline-flex; align-items: center; gap: .35em; padding: .2rem .6rem; border-radius: 9999px; font-weight: 600; white-space: nowrap; }
+.dashboard .chip .k { color: var(--muted); font-weight: 500; }
+.dashboard .chip.plain { background: var(--code-bg); color: var(--fg); }
+.dashboard .chip.good { background: #ecfdf5; color: #047857; }
+.dashboard .chip.warn { background: #fffbeb; color: #b45309; }
+.dashboard .dash-sep { width: 1px; background: var(--border); margin: .1rem .1rem; }
+
+.section, details.section { margin: 1.1rem 0; padding: .85rem 1.1rem; background: white; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.section h2, details.section summary { font-size: 1.2rem; padding-left: .75rem; cursor: pointer; }
 details.section summary { list-style: none; }
-details.section[open] summary { margin-bottom: .75rem; }
-.tag { color: white; font-size: .8em; padding: .15em .5em; border-radius: 4px; margin-right: .5em; }
-h3 { font-size: 1.1rem; margin-top: 1.25rem; color: var(--muted); }
+details.section[open] summary { margin-bottom: .6rem; }
+.tag { color: white; font-size: .78em; padding: .16em .5em; border-radius: 4px; margin-right: .5em; font-weight: 700; }
+h3 { font-size: 1rem; margin-top: 1rem; color: var(--muted); }
+
+/* === Empty section collapsed to a one-line verdict === */
+.section.empty { display: flex; align-items: center; gap: .55rem; padding: .6rem 1.1rem; }
+.section.empty .tag { margin-right: 0; }
+.section.empty .empty-title { font-weight: 600; font-size: 1.05rem; }
+.section.empty .empty-verdict { margin-left: auto; display: inline-flex; align-items: center; gap: .35em; color: #047857; background: #ecfdf5; padding: .18rem .65rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; }
+details.section.empty-body { margin-top: -.7rem; border: 1px dashed var(--border); box-shadow: none; background: #fcfcfb; }
+details.section.empty-body > summary { font-size: .8rem; color: var(--muted); padding-left: .25rem; }
+details.section.empty-body .section-body { font-size: .9em; }
+
+/* === §4 open issues → amber warning rows === */
+details.section[data-tag="§4"] .section-body ul { padding-left: 0; }
+details.section[data-tag="§4"] .section-body > ul > li { list-style: none; padding: .35rem .7rem; margin: .3rem 0; background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 4px; }
 blockquote { border-left: 4px solid #d6d3d1; padding-left: 1rem; color: var(--muted); margin: 1rem 0; }
 a { color: #0369a1; text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -106,13 +129,16 @@ th { background: var(--code-bg); font-weight: 600; }
 const TOC_SCRIPT = `
 (function buildToc() {
   if (window.innerWidth < 1280) return;
-  const headings = document.querySelectorAll('h2[id], summary[id], h3[id]');
+  const headings = document.querySelectorAll('h2[id], summary[id], h3[id], .empty-title[id]');
   if (headings.length < 3) return;
   const nav = document.createElement('nav');
   nav.className = 'toc';
   nav.innerHTML = '<div class="toc-title">On this page</div><ul></ul>';
   const ul = nav.querySelector('ul');
   headings.forEach(h => {
+    // Skip sub-headings folded inside a collapsed empty section — that's the noise
+    // we removed from the body; don't reintroduce it in the nav.
+    if (h.closest('.empty-body')) return;
     const li = document.createElement('li');
     const a = document.createElement('a');
     a.href = '#' + h.id;
@@ -136,7 +162,7 @@ const TOC_SCRIPT = `
 })();
 `;
 
-export function wrapHtml({ title, body, frontmatter, sourceFilename, sha }) {
+export function wrapHtml({ title, body, frontmatter, metrics, sourceFilename, sha }) {
   const status = frontmatter.status || 'draft';
   const tier = frontmatter.tier || '';
   const statusColor = STATUS_COLOR[status] || '#94a3b8';
@@ -151,10 +177,7 @@ export function wrapHtml({ title, body, frontmatter, sourceFilename, sha }) {
 </head>
 <body>
 <h1>${escapeHtml(title)}</h1>
-<div class="meta">
-  <span class="badge" style="background:${statusColor}">${escapeHtml(status)}</span>
-  ${tier ? `<span class="badge" style="background:#475569">${escapeHtml(tier)}</span>` : ''}
-</div>
+${renderDashboard({ status, statusColor, tier, metrics })}
 ${body}
 <div class="footer">
   Generated from <code>${escapeHtml(sourceFilename)}</code> · sha256: <code>${sha}</code> · status: <strong style="color:${statusColor}">${escapeHtml(status)}</strong>
@@ -169,6 +192,27 @@ ${body}
 </body>
 </html>
 `;
+}
+
+// Render the at-a-glance summary strip. Falls back gracefully if metrics absent.
+function renderDashboard({ status, statusColor, tier, metrics }) {
+  const m = metrics || {};
+  const l1 = m.l1 || { added: 0, modified: 0, removed: 0 };
+  const l1Total = (l1.added || 0) + (l1.modified || 0) + (l1.removed || 0);
+  const chips = [];
+  chips.push(`<span class="chip" style="background:${statusColor};color:#fff">${escapeHtml(status)}</span>`);
+  if (tier) chips.push(`<span class="chip plain">${escapeHtml(tier)} Tier</span>`);
+  chips.push('<span class="dash-sep"></span>');
+  if (typeof m.ac === 'number') chips.push(`<span class="chip plain"><span class="k">AC</span> ${m.ac}</span>`);
+  chips.push(`<span class="chip ${l1Total === 0 ? 'good' : 'plain'}"><span class="k">L1</span> +${l1.added || 0} ~${l1.modified || 0} −${l1.removed || 0}</span>`);
+  if (m.openIssues) chips.push(`<span class="chip warn"><span class="k">Open Issues</span> ${m.openIssues}</span>`);
+  else chips.push(`<span class="chip good"><span class="k">Open Issues</span> 0</span>`);
+  if (typeof m.docs === 'number') chips.push(`<span class="chip plain"><span class="k">Docs</span> ${m.docs}</span>`);
+  if (m.owners && m.owners.length) {
+    chips.push('<span class="dash-sep"></span>');
+    chips.push(`<span class="chip plain"><span class="k">owner</span> ${m.owners.map(escapeHtml).join(' · ')}</span>`);
+  }
+  return `<div class="dashboard">${chips.join('')}</div>`;
 }
 
 function escapeHtml(s) {
