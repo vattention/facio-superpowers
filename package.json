@@ -1,6 +1,6 @@
 {
   "name": "@vattention/facio-superpowers",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Documentation management for AI-assisted development with Claude Code and Cursor",
   "main": "cli.js",
   "bin": {
@@ -9,8 +9,9 @@
   "scripts": {
     "test": "node tests/harness-merge/test.js",
     "test:generator": "node --test src/generate-spec-html/*.test.mjs",
+    "test:bundle": "node --test templates/scripts-generate-spec-html.test.mjs",
     "test:server": "node --test services/spec-preview-server/*.test.mjs",
-    "build:generator": "node scripts/build-generator.mjs",
+    "build:generator": "node scripts/build-generator.mjs && npm run test:bundle",
     "version:patch": "npm version patch -m 'chore: bump version to %s'",
     "version:minor": "npm version minor -m 'chore: bump version to %s'",
     "version:major": "npm version major -m 'chore: bump version to %s'",

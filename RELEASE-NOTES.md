@@ -1,3 +1,33 @@
+## v2.8.0 (2026-07-06)
+
+### spec.html 生成器：可读性重做（信息密度 + 去噪 + 结构修复）
+
+L2 spec 的 HTML 产物之前"就是 markdown 照搬"，可读性差。本版修复渲染结构 bug 并重做呈现方式，让 reviewer 能"一眼看懂"而非通读整篇。
+
+### Fixed — 渲染结构损坏
+
+- **段落标签错配 / 不闭合**：`custom-rules.mjs` 的折叠状态（`inCollapsible`）在渲染 §4 后从不复位，导致其后所有非折叠段落（§5/§6/§K）用 `<h2>` 开、却用 `</summary>` 关；且所有 `<section>`/`<details>` 只开不关，整篇层层嵌套坍塌。表现为"§4 之后全糊成一坨"。改为用 `openSection` 追踪当前段落闭合标记，每开新段先关上一段，最后一段由 `renderSpec()` 兜底闭合。
+- **标题重复**：外壳已渲染 `<h1>` + 徽标，body 的 `# Title` 又渲染一次。现在剥掉 body 首个 H1。
+- 旧测试全是"单段落孤立渲染"，从未覆盖"折叠段后接非折叠段"这一真实顺序，故未抓到。新增多段落回归 + 结构平衡（open===close）断言。
+
+### Added — 信息密度
+
+- **顶部摘要 dashboard**：`status · tier · AC 数 · L1 +N ~N −N · Open Issues 数 · Docs 数 · owner`，颜色编码（绿=无影响 / 琥珀=有未决项）。新增 `metrics.mjs`（纯文本分析、独立可测）计算这些数字。
+- **空段落坍缩**：§5 L1 Impact 全为 "None"（含 "None（解释…）"、"暂无…当前按 None 处理" 等啰嗦写法）时，整段坍缩为一行 `✓ 无影响`，原文折叠进 `<details>`（不丢失、机器仍可读）。杀掉"一屏 None"噪音。
+- **§4 未决项**：渲染为琥珀警示行，扫读更快。
+- 全局排版收紧（字号/间距/圆角）。
+
+### Test / 内部
+
+- `src/generate-spec-html/*.test.mjs`：29 通过（新增空段坍缩、结构平衡、单一 H1、metrics 断言）。
+- 用**产物冒烟测试**（真实 CLI 跑打包后的 bundle）替换失效的 v1 全量 golden 测试（`spec-html-fixture.expected.html` 已删除）；`build:generator` 现在构建后自动跑冒烟测试。
+
+### 消费仓库（如 facio-server）如何获取
+
+无需改动 server —— 生成器经 `cli.js` 同步清单（`scripts/generate-spec-html.mjs` + `vendor-mermaid.min.js`，`phase: sync`）分发。server 端跑一次 harness 同步（发版后）即可用上新生成器，重新生成 spec.html 即生效。
+
+---
+
 ## v2.7.0 (2026-05-28)
 
 ### Added — `spec-preview-server` 持久链接 + 全组织零配置 on-demand clone

@@ -10,17 +10,28 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { createParser } from './parser.mjs';
 import { wrapHtml } from './template.mjs';
+import { computeMetrics } from './metrics.mjs';
 
 export async function renderSpec(specMdAbsPath) {
   const raw = readFileSync(specMdAbsPath, 'utf8');
-  const { frontmatter, body } = stripFrontmatter(raw);
+  const { frontmatter, frontmatterText, body } = stripFrontmatter(raw);
+  const title = extractTitle(body) ?? path.basename(specMdAbsPath, '.md');
+  const metrics = computeMetrics(body, frontmatterText);
   const parser = await createParser();
-  const renderedBody = parser.render(body);
+  const env = {};
+  // The shell (wrapHtml) already renders the title as <h1> with status badges,
+  // so drop the body's leading "# Title" to avoid a duplicated heading.
+  let renderedBody = parser.render(stripLeadingH1(body), env);
+  // Sections are derived from h2 headings, so the last one is never closed by a
+  // following section — close its trailing wrapper here. See custom-rules.mjs.
+  const trailingClose = env._customRules?.openSection;
+  if (trailingClose) renderedBody += trailingClose;
   const sha = createHash('sha256').update(raw).digest('hex');
   return wrapHtml({
-    title: extractTitle(body) ?? path.basename(specMdAbsPath, '.md'),
+    title,
     body: renderedBody,
     frontmatter,
+    metrics,
     sourceFilename: path.basename(specMdAbsPath),
     sha,
   });
@@ -28,8 +39,8 @@ export async function renderSpec(specMdAbsPath) {
 
 function stripFrontmatter(raw) {
   const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!m) return { frontmatter: {}, body: raw };
-  return { frontmatter: parseYamlFrontmatter(m[1]), body: m[2] };
+  if (!m) return { frontmatter: {}, frontmatterText: '', body: raw };
+  return { frontmatter: parseYamlFrontmatter(m[1]), frontmatterText: m[1], body: m[2] };
 }
 
 function parseYamlFrontmatter(yaml) {
@@ -44,6 +55,13 @@ function parseYamlFrontmatter(yaml) {
 function extractTitle(body) {
   const m = body.match(/^#\s+(.+?)$/m);
   return m ? m[1].trim() : null;
+}
+
+// Remove a single leading top-level "# Title" (the shell renders it separately).
+// Only strips a level-1 heading that is the first non-blank line, leaving any
+// later "#" content and all h2+ sections untouched.
+function stripLeadingH1(body) {
+  return body.replace(/^\s*#\s+.+?(?:\r?\n|$)/, '');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
