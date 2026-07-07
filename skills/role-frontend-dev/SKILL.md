@@ -1,6 +1,6 @@
 ---
 name: role-frontend-dev
-description: Role specialization for frontend developers. Triggers when user states they are frontend (e.g., "我是 frontend" / "I'm a frontend dev" / "做前端" / "frontend session") OR git config user.email matches the project's frontend roster in `.harness/role-bindings.yaml` OR an active L2 spec frontmatter has `role: frontend-dev`. Wraps upstream `prepare-context` with a frontend-focused default file set (components / pages / styles / design tokens / Figma references), then hint-chains to `spec-author` (重路径) or `brainstorming` (轻路径) per Flow Skill dispatch.
+description: Role specialization for frontend developers. Triggers when user states they are frontend (e.g., "我是 frontend" / "I'm a frontend dev" / "做前端" / "frontend session") OR git config user.email matches the project's frontend roster in `.harness/role-bindings.yaml` OR an active L2 spec frontmatter has `role: frontend-dev`. Wraps upstream `prepare-context` with a frontend-focused default file set (components / pages / styles / design tokens / Figma references), then hint-chains to the host repo's spec workflow or `brainstorming` per Flow Skill dispatch.
 ---
 
 # Role · Frontend Developer
@@ -80,15 +80,14 @@ After `prepare-context` completes:
 ✓ prepare-context loaded $K relevant files for frontend role lens
   Next step:
   - If task is exploratory / "我想想..." → invoke superpowers:brainstorming
-  - If task is "做 spec" / new capability → invoke Skill(spec-author)
+  - If task is "做 spec" / new capability → use the host repo's spec workflow
   - If existing ratified spec context present → Flow Skill M2b-R1 chain takes over
 ```
 
 ### Step 3: Record role in L2 spec frontmatter (when spec is drafted)
 
-If subsequent `spec-author` invocation drafts a new L2 spec, the spec's `role:`
-frontmatter should be `frontend-dev`. spec-author Step 0/2 reads this from the
-ongoing session context.
+If the host repo's spec workflow drafts a new L2 spec, the spec's `role:`
+frontmatter should be `frontend-dev`.
 
 ## Soft Warning Behavior (Tier-aware, A1 decision)
 
@@ -101,13 +100,13 @@ outside the role's typical scope. **Never block the PR** — the warning is info
 ```
 ✓ role-frontend-dev complete
   Loaded file globs: $K
-  Next: Skill(spec-author) OR superpowers:brainstorming (per task intent)
+  Next: host spec workflow OR superpowers:brainstorming (per task intent)
 ```
 
 <HARD-GATE>
 After role-frontend-dev:
 - MUST invoke prepare-context (upstream) as Step 1 — do not skip
 - MUST NOT modify prepare-context behavior (fork hygiene red line)
-- MUST chain to spec-author OR brainstorming as Step 2 — Flow Skill dispatch decides
+- MUST chain to the host spec workflow OR brainstorming as Step 2 — Flow Skill dispatch decides
 - MUST NOT block PR; this is a default lens, not enforcement (spec §8.1 A1)
 </HARD-GATE>

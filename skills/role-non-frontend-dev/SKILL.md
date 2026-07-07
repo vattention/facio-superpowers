@@ -1,6 +1,6 @@
 ---
 name: role-non-frontend-dev
-description: Role specialization for non-frontend developers (backend / data / DevOps). Triggers when user states they are non-frontend (e.g., "我是后端" / "I'm a backend dev" / "DevOps session" / "数据工程") OR git config user.email matches the project's non-frontend roster in `.harness/role-bindings.yaml` OR an active L2 spec frontmatter has `role: backend-dev` / `role: data-eng` / `role: devops`. Wraps upstream `prepare-context` with a server-side default file set (API contracts / schemas / deployment configs / services), then hint-chains to `spec-author` or `brainstorming` per Flow Skill dispatch.
+description: Role specialization for non-frontend developers (backend / data / DevOps). Triggers when user states they are non-frontend (e.g., "我是后端" / "I'm a backend dev" / "DevOps session" / "数据工程") OR git config user.email matches the project's non-frontend roster in `.harness/role-bindings.yaml` OR an active L2 spec frontmatter has `role: backend-dev` / `role: data-eng` / `role: devops`. Wraps upstream `prepare-context` with a server-side default file set (API contracts / schemas / deployment configs / services), then hint-chains to the host repo's spec workflow or `brainstorming` per Flow Skill dispatch.
 ---
 
 # Role · Non-Frontend Developer
@@ -78,7 +78,7 @@ conversation context. **Do not modify** prepare-context (fork hygiene).
 ✓ prepare-context loaded $K relevant files for non-frontend role lens
   Next:
   - Exploratory → superpowers:brainstorming
-  - New capability / spec → Skill(spec-author)
+  - New capability / spec → host repo's spec workflow
   - Existing ratified spec → Flow M2b-R1 chain
 ```
 
@@ -92,13 +92,13 @@ L2 spec `role:` frontmatter should be one of `backend-dev` / `data-eng` / `devop
 ```
 ✓ role-non-frontend-dev complete
   Loaded file globs: $K
-  Next: Skill(spec-author) OR superpowers:brainstorming
+  Next: host spec workflow OR superpowers:brainstorming
 ```
 
 <HARD-GATE>
 After role-non-frontend-dev:
 - MUST invoke prepare-context (upstream) as Step 1
 - MUST NOT modify prepare-context (fork hygiene red line)
-- MUST chain to spec-author OR brainstorming as Step 2
+- MUST chain to the host spec workflow OR brainstorming as Step 2
 - MUST NOT block PR (A1 soft-warn only)
 </HARD-GATE>
