@@ -1,5 +1,5 @@
 // spec-status.mjs — superpowers shared util for L2 spec state machine.
-// Used by spec-author / spec-ratifier / writing-plans / expert-reviewer / l1-updater.
+// Used by host spec workflows / spec-ratifier / writing-plans / expert-reviewer / l1-updater.
 //
 // Single source of truth: L2 spec.md frontmatter `status:` field (in product repo, git-tracked).
 // MCP does NOT call this; skills call it directly. MCP (facio-flow notify_spec_event)

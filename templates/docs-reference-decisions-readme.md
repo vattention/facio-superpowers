@@ -28,5 +28,5 @@ source: <spec change_id 或 "manual">
 
 ## 用法
 
-- spec-author Step 5 起草新 note 时拷贝本目录现有文件作模板
+- 起草新 decision note 时拷贝本目录现有文件作模板
 - 不直接编辑 `docs/reference/catalog.md`（catalog 由 `scripts/rebuild-catalog.sh` + CI 自动重建）

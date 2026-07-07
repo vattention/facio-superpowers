@@ -2,7 +2,7 @@
 # Knowledge Catalog
 
 > Single source of truth for `docs/reference/{decisions,guidelines,pitfalls}/` lookup.
-> spec-author Step 0 从这里加载相关 notes（progressive disclosure 入口）。
+> Host spec workflows 从这里加载相关 notes（progressive disclosure 入口）。
 >
 > AI 永远读 catalog，**不扫目录**。
 

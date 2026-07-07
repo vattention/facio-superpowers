@@ -1,12 +1,13 @@
 ---
 name: promote_context_to_spec
-description: Upgrade-bridge skill — promotes a Flow context (轻路径 discussion) into an L2 spec (重路径). Per spec §10.2 5-step contract. Triggers when (a) user invokes `/promote_context_to_spec <context_id>`, (b) flow-brainstorming末尾 self-detects discussion involves ≥3 files / new capability / cross-module impact, OR (c) user says "这个看起来挺大的 / 影响多个模块 / 应该有 spec". Loads context via `get_context`, extracts L2 raw material (goal/decisions/open_issues), invokes spec-author Step 2 pre-populated, then preserves the context via `append_to_context` (PROMOTED marker) + `cancel_context` (audit-preserving end-state). The "promoted_to_spec_<id>" semantics from spec §10.2 are realized via append+cancel since Flow MCP ContextStatus enum does not include that value (M4a design decision; M4b backlog evaluates enum extension).
+description: Upgrade-bridge skill — promotes a Flow context (轻路径 discussion) into a handoff for the host repo's L2/spec workflow. Per spec §10.2 contract. Triggers when user invokes `/promote_context_to_spec <context_id>`, flow-brainstorming detects large scope, or user says "这个看起来挺大的 / 影响多个模块 / 应该有 spec". Loads context via `get_context`, extracts raw material (goal/decisions/open_issues/test cases), appends a PROMOTED_TO_SPEC handoff marker, and cancels the source context for audit preservation. This skill does not author the spec itself.
 ---
 
 # Promote Context to Spec
 
 Upgrade-bridge skill. Converts an active Flow context (轻路径 discussion) into a
-new L2 spec (重路径) per spec §10.2's 5-step contract.
+handoff package for the host repo's L2/spec workflow per spec §10.2's audit
+preservation contract.
 
 **Design note (M4a)**: spec §10.2 literally says "status: promoted_to_spec_<new_spec_id>",
 but Flow MCP `ContextStatus` enum is `open | deciding | decided | claimed | closed |
@@ -52,10 +53,8 @@ Triggered by any of:
     halt with explanation. M4b backlog evaluates either (a) facio-flow store
     extends to accept `decided`, or (b) promote skill auto-`reopen` (transition
     decided → open) before append+cancel.
-- Target repo allows spec-author to resolve a spec directory from host rules:
-  `.harness/config.env` `FACIO_SPEC_DIR`, `AGENTS.md`, `docs/README.md`,
-  an existing `docs/specs/` / `specs/` / `docs/superpowers/specs/`, or the
-  documented fallback.
+- Target repo has a documented spec workflow, or the user accepts a handoff
+  package that can be pasted into the host repo's own spec process.
 
 ## Process
 
@@ -85,45 +84,38 @@ Map context → L2 spec sections per spec §10.2 Step 2:
 | `context.test_cases[]` | §1 产品视角 → "验收标准 (AC)" |
 | `context.product` | spec frontmatter `owners.engineer:` (default current user) |
 
-Produce a structured pre-populated material dict (not the full spec — that's
-spec-author's job in Step 3).
+Produce a structured handoff material dict, not the full spec. The host repo's
+own spec workflow owns final authoring and file placement.
 
-### Step 3: Invoke spec-author Step 2 pre-populated
+### Step 3: Prepare host-spec handoff
 
-```text
-Skill(spec-author)
-```
+Prepare a concise handoff block containing:
 
-When spec-author launches, it enters Step 1 (intent判定). Since this skill has
-already done the intent extraction, spec-author should detect a `PROMOTE_FROM_CONTEXT`
-context-bridge marker (passed via conversation context) and skip Step 1
-brainstorming wrap (intent already clarified). spec-author Step 2 then uses the
-pre-populated material as the seed for §1-§3 drafting.
+- source context id
+- title / goal
+- decisions
+- open issues
+- acceptance criteria / test cases
+- suggested host spec path if the repo declares one
 
-**Spec stub path**: `$SPEC_DIR/<YYYY-MM-DD>-<context_slug>.md`, where
-`SPEC_DIR` is resolved by spec-author from the host repo rules and
-`<context_slug>` is derived from `context.goal` (snake-case-to-kebab, max 40
-chars).
-
-If spec-author fails (validation error, user abort, etc.) → halt; do NOT execute
-Step 4 (don't pollute the context with PROMOTED marker if the spec doesn't exist).
+If the host repo does not declare a spec path, leave `suggested_host_spec_path`
+blank and say the host repo must choose the path.
 
 ### Step 4: Mark context promoted (append + cancel)
 
-After spec-author successfully drafts the spec stub (file exists at
-`<spec_path>`):
+After the handoff material is ready:
 
 ```text
 mcp__facio-flow__append_to_context(
   contextId=<context_id>,
-  content="PROMOTED_TO_SPEC: <spec_path> on <YYYY-MM-DD> by promote_context_to_spec skill.
+  content="PROMOTED_TO_SPEC: host-spec-handoff on <YYYY-MM-DD> by promote_context_to_spec skill.
 
 Original context preserved as audit source per spec §10.2 intent.
 Flow MCP ContextStatus enum (M4a) lacks `promoted_*` value; equivalent realized via
 this append marker + subsequent cancel_context.
 
-Spec authored: <spec_path>
-Spec status (initial): draft (will progress via spec-ratifier → ratified → implementing → ...)
+Handoff material:
+<structured handoff block>
 ",
   authorType="agent"
 )
@@ -139,26 +131,24 @@ Verify post-condition: `get_context(context_id)` returns `status: cancelled`;
 discussion[] contains the PROMOTED marker. **Do not** call `close_context` — that
 requires `claimed` status which we explicitly excluded.
 
-### Step 5: Hint chain → spec-author Step 3
+### Step 5: Hint chain → host spec workflow
 
 ```
 ✓ promote_context_to_spec complete
   Source context: <context_id> (now status: cancelled, preserved as audit)
-  New spec: <spec_path> (status: draft)
-  Spec frontmatter: change_id=<...>, owners.engineer=<...>
+  Handoff: PROMOTED_TO_SPEC marker appended
 
-  Next: continuing in spec-author Step 3 — draft §1-§7 three viewpoints + §K knowledge references
+  Next: use the host repo's spec workflow to create the actual spec artifact.
 ```
 
-Flow control: this skill terminates; spec-author Step 3 takes over (already
-invoked via Step 3 of this skill).
+Flow control: this skill terminates after preserving the source context.
 
 ## After execution · Hint Chain
 
 ```
 ✓ promote_context_to_spec
   context_id: <id> → status: cancelled (audit-preserved with PROMOTED marker)
-  spec_path: <path> → status: draft (handed to spec-author)
+  handoff: ready for host spec workflow
   Equivalent to spec §10.2 "promoted_to_spec_<id>" semantics; Flow MCP enum
   extension deferred to M4b backlog.
 ```
@@ -166,9 +156,8 @@ invoked via Step 3 of this skill).
 <HARD-GATE>
 After promote_context_to_spec:
 - MUST verify context status = `open` BEFORE any mutation (Step 1 gate; F1 codex P1 patched)
-- MUST invoke spec-author SUCCESSFULLY before append + cancel (Step 3 must produce a real spec file)
-- MUST NOT touch context if spec-author fails (rollback = no-op on context state)
+- MUST prepare host-spec handoff material before append + cancel
 - MUST use append_to_context + cancel_context, NEVER attempt to set status="promoted_to_spec_*"
   (that value is not in the MCP enum; Tool will reject)
-- MUST chain to spec-author Step 3 (continue drafting) — do NOT terminate before spec is reviewable
+- MUST NOT claim that a spec file was authored by this skill
 </HARD-GATE>

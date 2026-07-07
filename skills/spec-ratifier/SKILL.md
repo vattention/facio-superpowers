@@ -1,21 +1,21 @@
 ---
 name: spec-ratifier
-description: L2 spec 评审调度 — 按 spec §6 Tier 分发到 PM / 设计 / 研发 (+ 跨产品契约 owner) 评审；收齐 approval 后转 status draft→ratified；重生成 spec.html；触发 Flow MCP notify_spec_event。Triggers when user invokes spec-ratifier explicitly, or spec-author Step 15 hints chain after self-review all-PASS.
+description: L2 spec 评审调度 — 按 spec §6 Tier 分发到 PM / 设计 / 研发 (+ 跨产品契约 owner) 评审；收齐 approval 后转 status draft→ratified；重生成 spec.html；触发 Flow MCP notify_spec_event。Triggers when user invokes spec-ratifier explicitly for a draft spec with valid self-review.
 ---
 
 # Spec Ratifier（3 owner 评审 + status transition）
 
 **Announce at start:** "I'm using the spec-ratifier skill to dispatch ratification review."
 
-spec-ratifier 把 spec-author 起草完毕（status=draft，self-review all-PASS）的 L2 spec 通过 **GitHub PR + Reviews API** 推送给 3 owner 评审：active mode 开 PR 并通过 Lark card 通知 reviewer；resume mode 收齐 PR approvals 后转 status 到 ratified（PR 不 merge，等后续 implementation commits 一起 merge）。
+spec-ratifier 把已起草完毕（status=draft，self-review all-PASS）的 L2 spec 通过 **GitHub PR + Reviews API** 推送给 3 owner 评审：active mode 开 PR 并通过 Lark card 通知 reviewer；resume mode 收齐 PR approvals 后转 status 到 ratified（PR 不 merge，等后续 implementation commits 一起 merge）。
 
 ## When to use this skill
 
 spec-ratifier has **two modes** (auto-detected on entry — see Step 0):
 
 - **Active mode** — no PR exists yet for the current branch:
-  - spec-author Step 15 hints chain（self-review all-PASS 后）
   - 用户手动说 "ratify spec X" / "把 spec 推给评审"
+  - host spec workflow 已生成 draft spec + self-review all-PASS
   - Pushes branch, opens a draft PR, dispatches `review_requested` Lark broadcast, then exits
 - **Resume mode** — PR already exists and reviewers have approved on the PR:
   - 用户回来说 "approvals collected, finalize" / "resume spec-ratifier"
@@ -24,8 +24,8 @@ spec-ratifier has **two modes** (auto-detected on entry — see Step 0):
 ## When NOT to use
 
 - status ≠ draft（已 ratified/implementing/etc）→ 不重复 ratify
-- self-review 没跑 / 有 FAIL → 先回 spec-author Step 15 修
-- 用户想"先讨论一下" → 回 spec-author Step 1 wrap brainstorming
+- self-review 没跑 / 有 FAIL → 先回 host spec workflow 修
+- 用户想"先讨论一下" → 回 brainstorming / Flow context 继续澄清
 - 当前在 main 分支 → 先切到 feature 分支再 ratify
 - 未安装 gh CLI / 未 `gh auth login` → 先安装认证再回来
 
@@ -51,7 +51,7 @@ spec-ratifier has two modes — auto-detect on entry:
   4. gh CLI auth OK
 
 If neither mode applies, refuse to proceed:
-  - missing self-review.md / stale sha → "Re-run spec-author Step 15"
+  - missing self-review.md / stale sha → "Re-run host spec workflow self-review"
   - missing webhook → ".harness/README.md → Lark webhook 配置"
   - missing gh CLI → "Install gh: macOS `brew install gh`, Linux/Windows see docs; then `gh auth login`"
   - on main → "Refusing to operate on main; create a feature branch first"
@@ -106,7 +106,7 @@ You MUST create a TodoWrite task for each step:
 ```bash
 # Run from product repo root
 # Prefer an explicit SPEC_PATH from the caller. Otherwise resolve the host
-# repo's spec directory the same way spec-author does.
+# repo's spec directory using the same host-rule preference as other spec tools.
 if [ -n "${SPEC_PATH:-}" ]; then
   SPEC="$SPEC_PATH"
 else
@@ -162,7 +162,7 @@ STATUS=$(grep -E '^status:' "$SPEC" | head -1 | awk '{print $2}')
 
 CHANGE_ID=$(grep -E '^change_id:' "$SPEC" | head -1 | awk '{print $2}')
 REVIEW=".harness/changes/$CHANGE_ID/self-review.md"
-test -f "$REVIEW" || { echo "✗ self-review.md missing — run spec-author Step 15"; exit 1; }
+test -f "$REVIEW" || { echo "✗ self-review.md missing — run host spec workflow self-review"; exit 1; }
 grep -q '^result: pass' "$REVIEW" || { echo "✗ self-review.result != pass"; exit 1; }
 REVIEW_SHA=$(grep -E '^spec_sha:' "$REVIEW" | awk '{print $2}')
 CURRENT_SHA=$(shasum -a 256 "$SPEC" | awk '{print $1}')
@@ -310,7 +310,7 @@ elif [ -z "${FACIO_SPEC_PREVIEW_BASE_URL:-}" ]; then
 else
   REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
   # Preview-server returns whatever path is requested; we want the rendered .html,
-  # not the .md source. spec.html is committed alongside spec.md by spec-author Step 14.
+  # not the .md source. spec.html must be committed alongside spec.md by the host spec workflow.
   SPEC_HTML="${SPEC%.md}.html"
   PREVIEW_URL="${FACIO_SPEC_PREVIEW_BASE_URL}/${REPO_NAME}/${BRANCH}/${SPEC_HTML}"
   echo "✓ preview URL: $PREVIEW_URL"
@@ -324,11 +324,11 @@ fi
 | `FACIO_SPEC_PREVIEW_BASE_URL not set` | `.harness/config.env` 缺该 var | 添加；或 `SKIP_HTML_PREVIEW=1` 紧急绕过 |
 | reviewer 点 preview URL 拿到 502/404 | spec-preview-server 未起，或 branch 尚未 push | 检查 service 状态；确认 Step 3A 已 push branch |
 | 404 "repo not in scope" | repo 不在 `vattention` org，或 GitHub App 未装到该 org/repo | 确认 repo 属于 `vattention` org 且 App 已安装（**无需**逐 repo onboarding） |
-| reviewer 点 preview URL 跳 SSO 后还 404 | spec.html 不在该 branch（spec-author Step 14 未跑） | 回 spec-author Step 14 生成 spec.html + 重 commit |
+| reviewer 点 preview URL 跳 SSO 后还 404 | spec.html 不在该 branch | 用 host spec workflow 生成 spec.html + 重 commit |
 | 410 Gone | branch 已删 **且** spec.html 不在默认分支（如 PR 未合并即关闭） | 若需保留 preview，重开/合并 PR 使 spec.html 落到默认分支 |
 | 503 Service Unavailable | preview server 的 GitHub App token mint 失败（transient / infra） | 稍后重试；持续失败则 ping harness owner |
 
-**Note**: spec.html 由 spec-author Step 14 生成，Step 3A 的 git push 已推到 PR 分支；preview server 按需克隆并通过 `git show origin/<branch>:<path>` 取文件。无任何外部上传。`vattention` org 下的**任意** repo 都可 preview，无需逐 repo onboarding（server 经 GitHub App 按需 clone）。PR 合并 + branch 删除后，**同一 preview 链接仍然有效** —— preview server 自动 fallback 到 repo 的默认分支（提供已合并的 spec.html）。因此飞书卡片里的链接是**持久**的，不受 branch 生命周期限制。
+**Note**: spec.html 由 host spec workflow 生成，Step 3A 的 git push 已推到 PR 分支；preview server 按需克隆并通过 `git show origin/<branch>:<path>` 取文件。无任何外部上传。`vattention` org 下的**任意** repo 都可 preview，无需逐 repo onboarding（server 经 GitHub App 按需 clone）。PR 合并 + branch 删除后，**同一 preview 链接仍然有效** —— preview server 自动 fallback 到 repo 的默认分支（提供已合并的 spec.html）。因此飞书卡片里的链接是**持久**的，不受 branch 生命周期限制。
 
 ## Step 4A · Build review_requested Lark Card Payload
 
