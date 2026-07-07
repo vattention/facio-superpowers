@@ -7,7 +7,7 @@ description: Ambient skill triggered by GitHub Actions post-merge detection (wor
 
 Ambient skill. Runs as part of `.github/workflows/mitchell-loop.yml` (or invoked
 manually for local probe). **Not** part of the main 重路径 chain — never invoked
-by spec-author / writing-plans / expert-reviewer / l1-updater / role-* / promote.
+by spec authoring / writing-plans / expert-reviewer / l1-updater / role-* / promote.
 
 ## Inputs
 
@@ -243,7 +243,7 @@ This is an **ambient terminal skill**. Do NOT chain to any other skill.
 
 <HARD-GATE>
 mitchell-loop is ambient. After execution:
-- Do NOT invoke spec-author / writing-plans / expert-reviewer / l1-updater / role-* / promote_context_to_spec
+- Do NOT invoke spec authoring / writing-plans / expert-reviewer / l1-updater / role-* / promote_context_to_spec
 - The output (draft PR + Lark notify) goes to the team; human reviewers decide whether
   to ratify the draft (manual maturity: draft → verified after ≥1 spec §K reference)
 - If trigger condition not met (no review-N.md N≥2 and no review-escalation.md) →

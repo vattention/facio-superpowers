@@ -7,7 +7,7 @@ description: Ambient CI skill — scans L1 capability spec `anchors:` frontmatte
 
 Ambient CI skill. Runs as part of `.github/workflows/freshness-anchor-check.yml` (or
 invoked manually for local probe). **Not** part of the main 重路径 chain — never
-invoked by spec-author / writing-plans / expert-reviewer / l1-updater.
+invoked by spec authoring / writing-plans / expert-reviewer / l1-updater.
 
 ## Inputs
 
@@ -185,8 +185,8 @@ This is an **ambient terminal skill**. Do NOT chain to any other skill.
 
 <HARD-GATE>
 freshness-anchor-check is ambient. After execution:
-- Do NOT invoke spec-author / writing-plans / expert-reviewer / l1-updater
+- Do NOT invoke spec authoring / writing-plans / expert-reviewer / l1-updater
 - If broken/stale found → comment on PR or write `.harness/freshness-report.md` for the
   team to read; do not auto-fix (sentinel placement requires architectural judgment)
-- If user wants to fix stale anchor → they start a new L2 spec via spec-author
+- If user wants to fix stale anchor → they start a new L2 spec via the host repo's spec workflow
 </HARD-GATE>

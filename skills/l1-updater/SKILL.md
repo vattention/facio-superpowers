@@ -481,7 +481,7 @@ grep "last_updated:" docs/reference/capabilities/<affected>.md
 
   Audit trail (~/.facio-flow/audit.jsonl):
     Lifecycle events: 5
-      - review_requested (spec-ratifier Step 3, NOT spec-author — codex finding #7)
+      - review_requested (spec-ratifier Step 3, NOT spec authoring — codex finding #7)
       - ratified (spec-ratifier Step 7)
       - implementing_started (Flow HARD-GATE R2)
       - merged (Flow HARD-GATE R4)
@@ -497,13 +497,13 @@ This is the **terminal node** of 重路径 chain. Do not chain to any further sk
 
 <HARD-GATE>
 Do NOT invoke any other skill after archive. spec status `archived` is terminal:
-- spec-author / spec-ratifier / writing-plans / executing-plans / expert-reviewer 是
+- spec authoring / spec-ratifier / writing-plans / executing-plans / expert-reviewer 是
   上游 stages — chain 不能 loop backward
 - mitchell-loop / freshness-anchor-check 是 ambient (CI-triggered, not chained)
 - promote_context_to_spec 是轻路径 → 重路径桥（不是 post-archive）
 
 如 user 想重访该 capability，需 start NEW L2 spec (新 <slug>.md status: draft) 从
-spec-author 重新入链。
+spec authoring workflow 重新入链。
 </HARD-GATE>
 
 ## If l1-updater fails mid-run
