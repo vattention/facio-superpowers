@@ -10,7 +10,7 @@ Pick the Langfuse project by environment:
 
 | Environment | Langfuse project | Project ID |
 |---|---|---|
-| prod / production | Vattention / facio-production | `cmq7ptnou000hzh0764sabee` |
+| prod / production | Vattention / facio-production | `cmq7ptnou000hzh0764sabeeq` |
 | staging / dev / preview | Vattention / facio | `cmn1818yk0009zd072v0l6y3n` |
 
 Reference dashboard for the staging-style cost mouthfeel:

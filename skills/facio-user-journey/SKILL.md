@@ -151,11 +151,12 @@ Reports contain a real person's email, IP, and prompts.
 - Write to a **local path**. Never publish to any external host, artifact service, or shared drive.
 - Anything leaving your machine uses `--redact`.
 
-**Know what `--redact` does and does not do.** It masks direct identifiers (email, account_id, IP,
-display name) and blanks the raw `ai.prompts` dump. It **does not** scrub text you wrote yourself —
-any user quote you paste into `findings` or `timeline` **survives redaction verbatim**. That is
-deliberate: those quotes are usually the whole point of the report. But it makes *you* responsible
-for what you quote. Before sharing, reread your own findings for names, handles, file paths, or
-channel URLs the user mentioned in passing.
+**Know what `--redact` does and does not do.** It masks known direct identifiers (email,
+account_id, IP, display name) anywhere their exact value appears and blanks the raw `ai.prompts`
+dump. It **does not** semantically scrub text you wrote yourself — any other user quote you paste
+into `findings` or `timeline` **survives redaction verbatim**. That is deliberate: those quotes are
+usually the whole point of the report. But it makes *you* responsible for what you quote. Before
+sharing, reread your own findings for names, handles, file paths, or channel URLs the user mentioned
+in passing.
 - **This skill lives in a public repo.** Never commit a real user's email, an AWS account id, an
   ARN, or an endpoint into it — not in docs, not in tests, not in an example.

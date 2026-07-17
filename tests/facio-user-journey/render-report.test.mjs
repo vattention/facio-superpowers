@@ -77,3 +77,48 @@ test("renders user cost attribution and remotion trace mix", () => {
   assert.match(html, /remotion_coordinator/);
   assert.match(html, /pace_planner/);
 });
+
+test("redacts direct identifiers inside cost notes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "facio-user-journey-"));
+  const journeyPath = join(dir, "journey.json");
+  const outPath = join(dir, "report.html");
+
+  writeFileSync(
+    journeyPath,
+    JSON.stringify({
+      meta: { title: "redaction", verdict: "test", privacy_note: "local", tier: 2 },
+      identity: {
+        email: "user@example.com",
+        account_id: "31d2fda6-f162-4c50-9a1f-d4e6859e2682",
+        last_seen: "2026-07-17",
+        active_span: "1 day",
+      },
+      engagement: { events: [] },
+      findings: [],
+      timeline: [],
+      trajectory: { days: [] },
+      credits: null,
+      ai: null,
+      costs: {
+        summary: "$1.00 total",
+        note: "Langfuse userId=31d2fda6-f162-4c50-9a1f-d4e6859e2682 email=user@example.com",
+        categories: [],
+        remotion_trace_names: [],
+      },
+      recommendations: [],
+      sources: { list: "fixture" },
+    }),
+  );
+
+  execFileSync("python", [renderScript, "--journey", journeyPath, "--out", outPath, "--redact"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+
+  const html = readFileSync(outPath, "utf8");
+  assert.doesNotMatch(html, /31d2fda6-f162-4c50-9a1f-d4e6859e2682/);
+  assert.doesNotMatch(html, /user@example\\.com/);
+  assert.match(html, /31d2fda6…/);
+  assert.match(html, /u\*\*\*@example\.com/);
+  assert.doesNotMatch(html, /SECTION:costs\.remotion_trace_names/);
+});

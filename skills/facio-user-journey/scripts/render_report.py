@@ -70,18 +70,38 @@ def _mask_ip(ip: str) -> str:
     return f"{parts[0]}.{parts[1]}.x.x" if len(parts) == 4 else "x.x.x.x"
 
 
+def _replace_in_strings(value: Any, replacements: list[tuple[str, str]]) -> Any:
+    if isinstance(value, str):
+        for raw, masked in replacements:
+            if raw:
+                value = value.replace(raw, masked)
+        return value
+    if isinstance(value, list):
+        return [_replace_in_strings(v, replacements) for v in value]
+    if isinstance(value, dict):
+        return {k: _replace_in_strings(v, replacements) for k, v in value.items()}
+    return value
+
+
 def redact(journey: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy safe to share. Masks direct identifiers; keeps behavioral aggregates."""
+    """Return a copy safe to share. Masks known direct identifiers; keeps behavioral aggregates."""
     out = copy.deepcopy(journey)
     ident = out.get("identity") or {}
+    replacements: list[tuple[str, str]] = []
     if ident.get("email"):
+        replacements.append((ident["email"], _mask_email(ident["email"])))
         ident["email"] = _mask_email(ident["email"])
     if ident.get("account_id"):
+        replacements.append((ident["account_id"], f"{ident['account_id'][:8]}…"))
         ident["account_id"] = f"{ident['account_id'][:8]}…"
     if ident.get("ips"):
+        replacements.extend((i, _mask_ip(i)) for i in ident["ips"])
         ident["ips"] = [_mask_ip(i) for i in ident["ips"]]
     if ident.get("display_name"):
+        replacements.append((ident["display_name"], "***"))
         ident["display_name"] = "***"
+    if replacements:
+        out = _replace_in_strings(out, replacements)
     # User prompts are quoted verbatim in the AI section and can identify a person.
     ai = out.get("ai")
     if isinstance(ai, dict) and ai.get("prompts"):
@@ -132,9 +152,14 @@ def _with_pct(items: list[Any]) -> list[Any]:
 
 def render(journey: dict[str, Any], template: str) -> str:
     """journey + template -> HTML. Absent sections strip; all values escaped."""
-    out = _SECTION.sub(
-        lambda m: m.group(2) if _dig(journey, m.group(1)) else "", template
-    )
+    out = template
+    while True:
+        rendered = _SECTION.sub(
+            lambda m: m.group(2) if _dig(journey, m.group(1)) else "", out
+        )
+        if rendered == out:
+            break
+        out = rendered
 
     def rows_repl(m: re.Match[str]) -> str:
         items = _with_pct(_dig(journey, m.group(1)) or [])
