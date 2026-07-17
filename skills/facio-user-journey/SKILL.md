@@ -105,19 +105,21 @@ so build the JSON from this contract rather than guessing:
   "engagement": { "export_ratio": "1 / 1", "agent_ratio": "30 / 30", "sessions": 0,
                   "copilot_messages": 0, "timeline_edits": 0,
                   "events": [ { "name": "Client.Export.Completed", "count": 1 } ] },
-  "findings":   [ { "icon": "✅", "text": "" } ],
+  "findings":   [ { "icon": "✅", "lead": "一句话结论（渲染为粗体）", "text": "支撑细节" } ],
   "timeline":   [ { "t": "2026-07-09 21:00 UTC", "title": "", "detail": "", "kind": "hi" } ],
   "trajectory": { "note": "", "days": [ { "date": "2026-07-16", "tasks": 19, "exports": 0 } ] },
   "credits": null,   // Tier 2: { "summary": "384 / 1000" }
   "ai":      null,   // Tier 2: { "architecture_title","architecture_note","hierarchy",
                      //           "effects_title","effects_note","note",
                      //           "effects":[{range,name,component,effect_id}], "prompts":[] }
-  "recommendations": [ { "icon": "🔧", "text": "" } ],
+  "recommendations": [ { "icon": "🔧", "lead": "要做什么（粗体）", "text": "为什么 / 怎么做" } ],
   "sources": { "list": "" }
 }
 ```
 
 - `kind` on a timeline row: `hi` (green, success) · `stop` (red, break) · omit (neutral).
+- **All values are HTML-escaped** — user prompts are untrusted. HTML tags in your text render as
+  literal `&lt;b&gt;`. Use `lead` for emphasis; don't reach for markup.
 - **Never compute `pct` yourself** — the renderer scales bars to the max within each list. A
   hand-picked denominator makes an arbitrary number look authoritative.
 - Tier 1: leave `ai`, `credits`, and the Tier-2 identity fields **absent**. Sections strip
@@ -129,5 +131,12 @@ Reports contain a real person's email, IP, and prompts.
 
 - Write to a **local path**. Never publish to any external host, artifact service, or shared drive.
 - Anything leaving your machine uses `--redact`.
+
+**Know what `--redact` does and does not do.** It masks direct identifiers (email, account_id, IP,
+display name) and blanks the raw `ai.prompts` dump. It **does not** scrub text you wrote yourself —
+any user quote you paste into `findings` or `timeline` **survives redaction verbatim**. That is
+deliberate: those quotes are usually the whole point of the report. But it makes *you* responsible
+for what you quote. Before sharing, reread your own findings for names, handles, file paths, or
+channel URLs the user mentioned in passing.
 - **This skill lives in a public repo.** Never commit a real user's email, an AWS account id, an
   ARN, or an endpoint into it — not in docs, not in tests, not in an example.
