@@ -147,7 +147,10 @@ def _with_pct(items: list[Any]) -> list[Any]:
     if not field:
         return items
     top = max(r[field] for r in rows) or 1
-    return [{**r, "pct": round(r[field] / top * 100)} for r in rows]
+    return [
+        {**r, "pct": max(1, round(r[field] / top * 100)) if r[field] > 0 else 0}
+        for r in rows
+    ]
 
 
 def render(journey: dict[str, Any], template: str) -> str:

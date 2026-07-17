@@ -46,7 +46,8 @@ Compute:
    - `pace_planner`
    - `effect_generator`
    - `pack_brief_planner`
-4. Trace/call count when available.
+4. Full trace-name cost distribution for every observed trace name, sorted by cost descending.
+5. Trace/call count when available.
 
 Use Langfuse's recorded cost fields. Do not recompute model pricing unless the recorded cost is
 missing and the user explicitly asks for an estimate.
@@ -68,6 +69,11 @@ Add this block near the end of the rendered report:
     { "name": "effect_generator", "cost": "$0.30", "share": "50%", "traces": 2, "value": 0.30 },
     { "name": "remotion_coordinator", "cost": "$0.18", "share": "30%", "traces": 1, "value": 0.18 },
     { "name": "pace_planner", "cost": "$0.12", "share": "20%", "traces": 1, "value": 0.12 }
+  ],
+  "trace_names": [
+    { "name": "server_agent", "cost": "$0.32", "share": "32%", "traces": 5, "value": 0.32 },
+    { "name": "effect_generator", "cost": "$0.30", "share": "30%", "traces": 2, "value": 0.30 },
+    { "name": "title_generation", "cost": "$0.01", "share": "1%", "traces": 1, "value": 0.01 }
   ]
 }
 ```
@@ -82,7 +88,8 @@ When no cost data is available:
   "summary": "未观察到 Langfuse 成本",
   "note": "Langfuse returned no traces for this user/time window.",
   "categories": [],
-  "remotion_trace_names": []
+  "remotion_trace_names": [],
+  "trace_names": []
 }
 ```
 

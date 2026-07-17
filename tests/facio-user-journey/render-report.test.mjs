@@ -56,6 +56,11 @@ test("renders user cost attribution and remotion trace mix", () => {
           { name: "remotion_coordinator", cost: "$0.18", share: "30%", traces: 1, value: 0.18 },
           { name: "pace_planner", cost: "$0.12", share: "20%", traces: 1, value: 0.12 },
         ],
+        trace_names: [
+          { name: "server_agent", cost: "$0.32", share: "32%", traces: 5, value: 0.32 },
+          { name: "effect_generator", cost: "$0.30", share: "30%", traces: 2, value: 0.3 },
+          { name: "title_generation", cost: "$0.01", share: "1%", traces: 1, value: 0.01 },
+        ],
       },
       recommendations: [],
       sources: { list: "fixture" },
@@ -76,6 +81,10 @@ test("renders user cost attribution and remotion trace mix", () => {
   assert.match(html, /effect_generator/);
   assert.match(html, /remotion_coordinator/);
   assert.match(html, /pace_planner/);
+  assert.match(html, /全部 trace_name 成本分布/);
+  assert.match(html, /server_agent/);
+  assert.match(html, /title_generation/);
+  assert.match(html, /title_generation[\s\S]*width:3%/);
 });
 
 test("redacts direct identifiers inside cost notes", () => {
