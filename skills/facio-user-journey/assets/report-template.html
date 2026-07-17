@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{meta.title}}</title>
+<style>
+  :root{
+    --cyan:#00b8d4; --pink:#e91e63;
+    --bg:#f6f7fb; --card:#ffffff; --ink:#141721; --muted:#5b6472;
+    --line:#e6e9f0; --chip:#eef1f7; --accent:#0b7285;
+    --ok:#12a150; --warn:#d98a00; --bad:#e5484d;
+    --shadow:0 1px 2px rgba(20,23,33,.04),0 8px 24px rgba(20,23,33,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0c0e14; --card:#141821; --ink:#eef1f7; --muted:#9aa4b2;
+      --line:#232936; --chip:#1b212c; --accent:#3bc9db;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); }
+  }
+  :root[data-theme="light"]{ --bg:#f6f7fb; --card:#fff; --ink:#141721; --muted:#5b6472; --line:#e6e9f0; --chip:#eef1f7; --accent:#0b7285; }
+  :root[data-theme="dark"]{ --bg:#0c0e14; --card:#141821; --ink:#eef1f7; --muted:#9aa4b2; --line:#232936; --chip:#1b212c; --accent:#3bc9db; }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:.2px}
+  h2{font-size:18px;margin:40px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
+  h2 .n{font-size:12px;color:#fff;background:linear-gradient(135deg,var(--cyan),var(--pink));
+    width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-weight:700}
+  h3{font-size:15px;margin:20px 0 8px}
+  p{margin:8px 0}
+  .muted{color:var(--muted)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em}
+
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--cyan),var(--pink))}
+  .hero .row{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:baseline;justify-content:space-between}
+  .verdict{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13px;
+    background:var(--chip);color:var(--accent);padding:6px 12px;border-radius:999px;border:1px solid var(--line)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin-top:14px;font-size:13.5px}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+  .tile .big{font-size:24px;font-weight:700;letter-spacing:.3px}
+  .tile .lab{font-size:12px;color:var(--muted);margin-top:2px}
+  .tile.good .big{color:var(--ok)} .tile.warn .big{color:var(--warn)} .tile.bad .big{color:var(--bad)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);margin:14px 0}
+
+  .tl{position:relative;margin:8px 0 0;padding-left:26px}
+  .tl::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .ev{position:relative;padding:10px 0 14px}
+  .ev::before{content:"";position:absolute;left:-23px;top:14px;width:12px;height:12px;border-radius:50%;
+    background:var(--card);border:2px solid var(--accent)}
+  .ev.hi::before{border-color:var(--ok);background:var(--ok)}
+  .ev.stop::before{border-color:var(--bad);background:var(--bad)}
+  .ev .t{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace}
+  .ev .h{font-weight:600;margin:1px 0 2px}
+
+  .fx{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-top:12px}
+  .fxc{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--chip)}
+  .fxc .rng{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--muted)}
+  .fxc .nm{font-weight:600;margin:3px 0}
+  .fxc .id{font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)}
+
+  .tblwrap{overflow-x:auto;margin:12px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:420px}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px}
+  td.num{font-family:ui-monospace,monospace}
+  tr:last-child td{border-bottom:none}
+  .bar{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--cyan),var(--pink));display:inline-block;vertical-align:middle}
+
+  .find{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .find:last-child{border-bottom:none}
+  .find .ic{flex:none;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:14px;background:var(--chip)}
+
+  .note{font-size:12.5px;color:var(--muted);background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:10px}
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  code.k{background:var(--chip);padding:1px 6px;border-radius:5px;font-family:ui-monospace,monospace;font-size:.86em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="row">
+      <div>
+        <h1>{{meta.title}}</h1>
+        <div class="muted mono">{{identity.email}} · {{identity.persona}}</div>
+      </div>
+      <span class="verdict">● {{meta.verdict}}</span>
+    </div>
+    <dl class="kv">
+      <dt>account_id</dt><dd class="mono">{{identity.account_id}}</dd>
+      <dt>注册</dt><dd>{{identity.signup_utc}} · {{identity.auth_provider}}</dd>
+      <dt>产品</dt><dd>{{identity.product}}</dd>
+      <dt>活跃跨度</dt><dd>{{identity.active_span}}</dd>
+      <dt>最后活跃</dt><dd>{{identity.last_seen}}</dd>
+    </dl>
+  </div>
+
+  <div class="tiles">
+    <div class="tile good"><div class="big">{{engagement.export_ratio}}</div><div class="lab">导出成功 / 尝试</div></div>
+    <div class="tile"><div class="big">{{engagement.agent_ratio}}</div><div class="lab">AI Agent 任务完成</div></div>
+    <div class="tile"><div class="big">{{engagement.sessions}}</div><div class="lab">会话数</div></div>
+    <div class="tile"><div class="big">{{engagement.copilot_messages}}</div><div class="lab">AI 指令条数</div></div>
+    <div class="tile"><div class="big">{{engagement.timeline_edits}}</div><div class="lab">时间线编辑</div></div>
+<!--SECTION:credits-->
+    <div class="tile warn"><div class="big">{{credits.summary}}</div><div class="lab">积分消耗</div></div>
+<!--/SECTION:credits-->
+  </div>
+
+  <h2><span class="n">1</span>核心结论</h2>
+  <div class="card">
+<!--ROWS:findings-->
+    <div class="find"><div class="ic">{{row.icon}}</div><div>{{row.text}}</div></div>
+<!--/ROWS:findings-->
+  </div>
+
+  <h2><span class="n">2</span>行为时间线</h2>
+  <p class="muted" style="font-size:13px">{{timeline_note}}</p>
+  <div class="card">
+    <div class="tl">
+<!--ROWS:timeline-->
+      <div class="ev {{row.kind}}"><div class="t">{{row.t}}</div><div class="h">{{row.title}}</div><div class="muted">{{row.detail}}</div></div>
+<!--/ROWS:timeline-->
+    </div>
+  </div>
+
+<!--SECTION:trajectory-->
+  <h2><span class="n">3</span>每日投入 vs 产出</h2>
+  <div class="card">
+    <p class="muted" style="font-size:13px">{{trajectory.note}}</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>日期</th><th>AI 任务</th><th>导出</th><th style="width:160px">投入量级</th></tr></thead>
+      <tbody>
+<!--ROWS:trajectory.days-->
+        <tr><td class="num">{{row.date}}</td><td class="num">{{row.tasks}}</td><td class="num">{{row.exports}}</td><td><span class="bar" style="width:{{row.pct}}%"></span></td></tr>
+<!--/ROWS:trajectory.days-->
+      </tbody>
+    </table></div>
+  </div>
+<!--/SECTION:trajectory-->
+
+<!--SECTION:ai-->
+  <h2><span class="n">4</span>AI 动线深度还原</h2>
+  <div class="card">
+    <h3>{{ai.architecture_title}}</h3>
+    <p>{{ai.architecture_note}}</p>
+    <p class="mono muted" style="font-size:12.5px">{{ai.hierarchy}}</p>
+  </div>
+<!--SECTION:ai.effects-->
+  <div class="card">
+    <h3>{{ai.effects_title}}</h3>
+    <p class="muted" style="font-size:13px">{{ai.effects_note}}</p>
+    <div class="fx">
+<!--ROWS:ai.effects-->
+      <div class="fxc"><div class="rng">{{row.range}}</div><div class="nm">{{row.name}}</div><div class="muted" style="font-size:12.5px">{{row.component}}</div><div class="id">{{row.effect_id}}</div></div>
+<!--/ROWS:ai.effects-->
+    </div>
+    <div class="note">{{ai.note}}</div>
+  </div>
+<!--/SECTION:ai.effects-->
+<!--/SECTION:ai-->
+
+<!--SECTION:engagement.events-->
+  <h2><span class="n">5</span>客户端埋点</h2>
+  <div class="tblwrap"><table>
+    <thead><tr><th>事件</th><th>次数</th><th style="width:180px">量级</th></tr></thead>
+    <tbody>
+<!--ROWS:engagement.events-->
+      <tr><td>{{row.name}}</td><td class="num">{{row.count}}</td><td><span class="bar" style="width:{{row.pct}}%"></span></td></tr>
+<!--/ROWS:engagement.events-->
+    </tbody>
+  </table></div>
+<!--/SECTION:engagement.events-->
+
+<!--SECTION:recommendations-->
+  <h2><span class="n">6</span>建议</h2>
+  <div class="card">
+<!--ROWS:recommendations-->
+    <div class="find"><div class="ic">{{row.icon}}</div><div>{{row.text}}</div></div>
+<!--/ROWS:recommendations-->
+  </div>
+<!--/SECTION:recommendations-->
+
+  <footer>
+    <p><b>数据来源</b>：{{sources.list}}</p>
+    <p><b>口径</b>：Mixpanel 原始为项目时区 America/Los_Angeles，已统一换算为 UTC。导出/激活为客户端事件，数据库中不存在该记录。</p>
+    <p><b>隐私</b>：{{meta.privacy_note}}</p>
+    <p class="muted">生成于 {{meta.generated_at}} · tier {{meta.tier}} · redacted={{meta.redacted}}</p>
+  </footer>
+
+</div>
+</body>
+</html>

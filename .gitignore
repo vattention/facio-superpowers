@@ -10,3 +10,4 @@ triage/
 # Build output copies — re-generated from vendor/ by scripts/build-generator.mjs.
 # Source of truth is vendor/mermaid.min.js.
 templates/vendor-mermaid.min.js
+__pycache__/
