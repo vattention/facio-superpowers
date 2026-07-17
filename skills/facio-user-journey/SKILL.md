@@ -1,6 +1,6 @@
 ---
 name: facio-user-journey
-description: Use when investigating what a facio user did — "分析这个邀测用户", "这个用户的行为动线", "查一下这个邮箱", beta-user activation review, churn or drop-off diagnosis, "did this user ever finish a video", or producing a user behavior report.
+description: Use when investigating what a facio user did — "分析这个邀测用户", "这个用户的行为动线", "查一下这个邮箱", beta-user activation review, churn or drop-off diagnosis, project/material usage statistics, "did this user ever finish a video", or producing a user behavior report.
 ---
 
 # Facio User Journey
@@ -73,7 +73,33 @@ separates "trying hard" from "gave up" in one glance.
 **Mixpanel returns project-local time (America/Los_Angeles). The DB is UTC.** Convert before
 comparing, or you will misdate the export by 7 hours and cross a day boundary.
 
-### 4. Tier 2 only — read what the user actually said
+### 4. Build usage statistics and per-project output
+
+Always add the usage summary and one row per observed `project_id`. Use direct event properties
+before temporal inference. Full definitions, source priority, and evidence labels:
+`references/usage-statistics.md`.
+
+Required summary:
+
+- 统计跨度
+- 工程数
+- 素材数 / 素材总时长
+- Chat 次数（业务消息 / Langfuse GENERATION）
+- Remotion 次数（完整流程 / Langfuse GENERATION）
+
+Required per-project columns:
+
+- `project_id`
+- 工程证据
+- 素材数量 / 素材总时长
+- 成片时长
+- 导出结果
+
+`Client.Project.Created` can be absent for a real project reopened from disk. Count distinct
+`project_id` values across created/reopened/editor/import/chat/export events and label the result
+`可观测`. Never multiply-count an asset because it emitted many `AssetAnalysis.SDK.*` stages.
+
+### 5. Tier 2 only — read what the user actually said
 
 `references/prod-db.md`. Read-only, least-privilege role, reader endpoint, everything discovered
 at runtime.
@@ -86,7 +112,7 @@ plainly. Counting tool calls will never surface it.
 Do not stop at "the tools all returned success". Tools succeeding while the user is unhappy **is**
 the finding: it means the failure is in output *quality*, which no status field records.
 
-### 5. Tier 2 only — attribute Langfuse cost
+### 6. Tier 2 only — attribute Langfuse cost
 
 `references/langfuse-costs.md`. Use Langfuse recorded cost, grouped by user and trace name. Add
 the result as a report appendix; never let Langfuse auth/API issues block the behavioral report.
@@ -104,7 +130,7 @@ For `remotion`, also show the internal trace-name mix:
 - `effect_generator`
 - `pack_brief_planner`
 
-### 6. Render
+### 7. Render
 
 ```bash
 python scripts/render_report.py --journey journey.json --out ~/report.html          # local
@@ -123,6 +149,22 @@ so build the JSON from this contract rather than guessing:
   "engagement": { "export_ratio": "1 / 1", "agent_ratio": "30 / 30", "sessions": 0,
                   "copilot_messages": 0, "timeline_edits": 0,
                   "events": [ { "name": "Client.Export.Completed", "count": 1 } ] },
+  "usage_summary": {
+    "active_span": "95 分 13 秒，单日",
+    "projects": "2（可观测）",
+    "assets": "3（已确认）",
+    "asset_duration": "915.69 秒（15:15.69）",
+    "chat": "18 条业务消息 / 77 generation",
+    "remotion": "2 套完整流程 / 45 generation",
+    "note": "业务次数与 Langfuse GENERATION observation 分开计数。"
+  },
+  "projects": [
+    { "project_id": "proj_example",
+      "evidence": "Client.Project.Created ×1；Client.Editor.Entered ×2",
+      "assets": "2", "asset_duration": "1,277.30 秒（21:17.30）",
+      "output_duration": "647.90 秒（10:47.90）",
+      "export_result": "成功：Export.Started ×1，Export.Completed ×1，Failed ×0" }
+  ],
   "findings":   [ { "icon": "✅", "lead": "一句话结论（渲染为粗体）", "text": "支撑细节" } ],
   "timeline":   [ { "t": "2026-07-09 21:00 UTC", "title": "", "detail": "", "kind": "hi" } ],
   "trajectory": { "note": "", "days": [ { "date": "2026-07-16", "tasks": 19, "exports": 0 } ] },
@@ -143,6 +185,9 @@ so build the JSON from this contract rather than guessing:
   hand-picked denominator makes an arbitrary number look authoritative.
 - Tier 1: leave `ai`, `credits`, and the Tier-2 identity fields **absent**. Sections strip
   themselves. Do not fill them with `—`.
+- If usage/project data is unavailable, omit `usage_summary` / `projects`; both sections strip
+  themselves. Within a populated project row, write `未观察到…` or `无法获取` rather than
+  silently substituting zero.
 
 ## Privacy — non-negotiable
 

@@ -43,8 +43,10 @@
   .kv dd{margin:0}
 
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
+  .tiles.usage{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
   .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
   .tile .big{font-size:24px;font-weight:700;letter-spacing:.3px}
+  .tiles.usage .big{font-size:18px;overflow-wrap:anywhere}
   .tile .lab{font-size:12px;color:var(--muted);margin-top:2px}
   .tile.good .big{color:var(--ok)} .tile.warn .big{color:var(--warn)} .tile.bad .big{color:var(--bad)}
 
@@ -68,6 +70,7 @@
 
   .tblwrap{overflow-x:auto;margin:12px 0}
   table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:420px}
+  table.projects{min-width:900px}
   th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
   th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px}
   td.num{font-family:ui-monospace,monospace}
@@ -126,6 +129,33 @@
     <div class="tile warn"><div class="big">{{credits.summary}}</div><div class="lab">积分消耗</div></div>
 <!--/SECTION:credits-->
   </div>
+
+<!--SECTION:usage_summary-->
+  <h2><span class="n">统</span>使用规模统计</h2>
+  <div class="tiles usage">
+    <div class="tile"><div class="big">{{usage_summary.active_span}}</div><div class="lab">统计跨度</div></div>
+    <div class="tile"><div class="big">{{usage_summary.projects}}</div><div class="lab">工程数</div></div>
+    <div class="tile"><div class="big">{{usage_summary.assets}}</div><div class="lab">素材数</div></div>
+    <div class="tile"><div class="big">{{usage_summary.asset_duration}}</div><div class="lab">素材时长</div></div>
+    <div class="tile"><div class="big">{{usage_summary.chat}}</div><div class="lab">Chat 次数（业务 / generation）</div></div>
+    <div class="tile"><div class="big">{{usage_summary.remotion}}</div><div class="lab">Remotion 次数（完整流程 / generation）</div></div>
+  </div>
+<!--SECTION:usage_summary.note-->
+  <div class="note">{{usage_summary.note}}</div>
+<!--/SECTION:usage_summary.note-->
+<!--/SECTION:usage_summary-->
+
+<!--SECTION:projects-->
+  <h2><span class="n">项</span>每个客户端工程与产出</h2>
+  <div class="tblwrap"><table class="projects">
+    <thead><tr><th>project_id</th><th>工程证据</th><th>素材数量</th><th>素材总时长</th><th>成片时长</th><th>导出结果</th></tr></thead>
+    <tbody>
+<!--ROWS:projects-->
+      <tr><td class="num">{{row.project_id}}</td><td>{{row.evidence}}</td><td class="num">{{row.assets}}</td><td class="num">{{row.asset_duration}}</td><td class="num">{{row.output_duration}}</td><td>{{row.export_result}}</td></tr>
+<!--/ROWS:projects-->
+    </tbody>
+  </table></div>
+<!--/SECTION:projects-->
 
   <h2><span class="n">1</span>核心结论</h2>
   <div class="card">

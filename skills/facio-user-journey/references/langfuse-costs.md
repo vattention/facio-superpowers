@@ -48,6 +48,11 @@ Compute:
    - `pack_brief_planner`
 4. Full trace-name cost distribution for every observed trace name, sorted by cost descending.
 5. Trace/call count when available.
+6. `GENERATION` observation count for the chat bucket and Remotion bucket. Keep these separate from
+   trace count and from Mixpanel business actions.
+
+For Remotion, also count complete workflows using `usage-statistics.md`. A coordinator-only retry
+can add generation observations without adding a complete workflow.
 
 Use Langfuse's recorded cost fields. Do not recompute model pricing unless the recorded cost is
 missing and the user explicitly asks for an estimate.

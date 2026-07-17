@@ -30,6 +30,8 @@ Anchor on these semantic families rather than a frozen list — the catalog evol
 | Craft | `Client.Timeline.Edit`, `Client.Timeline.FirstEdit` | hands-on effort |
 | Entry | `$session_start`, `Client.Editor.Entered`, `Client.Project.Created` | sessions |
 | Input | `Client.Media.Imported` | source material |
+| Asset detail | `AssetAnalysis.Client.*` / `AssetAnalysis.Asset.*` | unique asset IDs and completion |
+| Asset stages | `AssetAnalysis.SDK.*` | duration/size metadata; deduplicate before summing |
 | Funnel | `InviteCodeSubmitted` / `InviteCodeActivated` / `InviteCodeFailed` | onboarding |
 | Delivery | `DownloadStarted` | got the file out |
 
@@ -131,6 +133,23 @@ Read the two lines together:
 - one export then nothing, effort continues → activation worked once, repeat conversion broke
 
 Use `unit: "hour"` on a single day to place an event precisely — then **convert to UTC**.
+
+## 5. Project and material evidence
+
+Break the project/editor/media/Copilot/export event families down by event property `project_id`.
+Build the observed project set from the union of all non-empty values; do not require a
+`Client.Project.Created` event.
+
+For each project, collect:
+
+- `Client.Project.Created`, `Client.Project.Reopened`, `Client.Editor.Entered` counts
+- `Client.Media.Imported.file_count` and `total_size_bytes`
+- `Client.Export.Started`, `.Completed`, `.Failed` counts and `duration_sec`
+
+Then query the `AssetAnalysis.*` event families for `asset_id`, `asset_trace_id`,
+`asset_duration_ms`, and `asset_size_bytes`. These are repeated on many stage events, so counting
+rows or summing duration directly is wrong. Follow `usage-statistics.md` for deduplication and
+project-attribution rules.
 
 ## Hard limits and gotchas
 
