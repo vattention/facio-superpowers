@@ -106,6 +106,29 @@ def _fill(text: str, lookup) -> str:
     return _VAR.sub(repl, text)
 
 
+_PCT_SOURCES = ("count", "tasks", "value")
+
+
+def _with_pct(items: list[Any]) -> list[Any]:
+    """Auto-scale bar widths so nobody has to invent a baseline.
+
+    Analysts were picking their own denominator, which made bars look
+    authoritative while being arbitrary. pct is always value/max within the
+    same list. An explicit pct on the item wins.
+    """
+    rows = [i for i in items if isinstance(i, dict)]
+    if not rows or any("pct" in r for r in rows):
+        return items
+    field = next(
+        (f for f in _PCT_SOURCES
+         if all(isinstance(r.get(f), (int, float)) for r in rows)), None
+    )
+    if not field:
+        return items
+    top = max(r[field] for r in rows) or 1
+    return [{**r, "pct": round(r[field] / top * 100)} for r in rows]
+
+
 def render(journey: dict[str, Any], template: str) -> str:
     """journey + template -> HTML. Absent sections strip; all values escaped."""
     out = _SECTION.sub(
@@ -113,7 +136,7 @@ def render(journey: dict[str, Any], template: str) -> str:
     )
 
     def rows_repl(m: re.Match[str]) -> str:
-        items = _dig(journey, m.group(1)) or []
+        items = _with_pct(_dig(journey, m.group(1)) or [])
         body = m.group(2)
         return "".join(
             _fill(body, lambda k, it=item: _dig({"row": it}, k)) for item in items
