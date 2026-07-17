@@ -16,7 +16,7 @@ answer it. Agents that start with the database burn their whole budget and still
 | Tier | Needs | Answers |
 |---|---|---|
 | **1** | Mixpanel MCP OAuth only | Did they export? When active? Where did they stall? Full client path. |
-| **2** | Tier 1 + working AWS creds | Adds: what they *said* to the AI, effects generated, credits |
+| **2** | Tier 1 + working AWS creds + Langfuse access | Adds: what they *said* to the AI, effects generated, credits, user cost |
 
 ```bash
 aws sts get-caller-identity >/dev/null 2>&1 && echo TIER2 || echo TIER1
@@ -86,7 +86,25 @@ plainly. Counting tool calls will never surface it.
 Do not stop at "the tools all returned success". Tools succeeding while the user is unhappy **is**
 the finding: it means the failure is in output *quality*, which no status field records.
 
-### 5. Render
+### 5. Tier 2 only — attribute Langfuse cost
+
+`references/langfuse-costs.md`. Use Langfuse recorded cost, grouped by user and trace name. Add
+the result as a report appendix; never let Langfuse auth/API issues block the behavioral report.
+
+Required buckets:
+
+- `remotion`
+- `素材分析`
+- `chat`
+
+For `remotion`, also show the internal trace-name mix:
+
+- `remotion_coordinator`
+- `pace_planner`
+- `effect_generator`
+- `pack_brief_planner`
+
+### 6. Render
 
 ```bash
 python scripts/render_report.py --journey journey.json --out ~/report.html          # local
@@ -109,6 +127,7 @@ so build the JSON from this contract rather than guessing:
   "timeline":   [ { "t": "2026-07-09 21:00 UTC", "title": "", "detail": "", "kind": "hi" } ],
   "trajectory": { "note": "", "days": [ { "date": "2026-07-16", "tasks": 19, "exports": 0 } ] },
   "credits": null,   // Tier 2: { "summary": "384 / 1000" }
+  "costs":  null,   // Tier 2: see references/langfuse-costs.md
   "ai":      null,   // Tier 2: { "architecture_title","architecture_note","hierarchy",
                      //           "effects_title","effects_note","note",
                      //           "effects":[{range,name,component,effect_id}], "prompts":[] }

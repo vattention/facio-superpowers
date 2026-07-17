@@ -195,6 +195,33 @@
   </div>
 <!--/SECTION:recommendations-->
 
+<!--SECTION:costs-->
+  <h2><span class="n">7</span>用户成本归因</h2>
+  <div class="card">
+    <p><b>{{costs.summary}}</b></p>
+    <p class="muted" style="font-size:13px">{{costs.note}}</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>业务类型</th><th>成本</th><th>占比</th><th>链路数</th><th style="width:180px">量级</th></tr></thead>
+      <tbody>
+<!--ROWS:costs.categories-->
+        <tr><td>{{row.name}}</td><td class="num">{{row.cost}}</td><td class="num">{{row.share}}</td><td class="num">{{row.traces}}</td><td><span class="bar" style="width:{{row.pct}}%"></span></td></tr>
+<!--/ROWS:costs.categories-->
+      </tbody>
+    </table></div>
+<!--SECTION:costs.remotion_trace_names-->
+    <h3>remotion trace_name 占比</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th>trace_name</th><th>成本</th><th>占比</th><th>链路数</th><th style="width:180px">量级</th></tr></thead>
+      <tbody>
+<!--ROWS:costs.remotion_trace_names-->
+        <tr><td>{{row.name}}</td><td class="num">{{row.cost}}</td><td class="num">{{row.share}}</td><td class="num">{{row.traces}}</td><td><span class="bar" style="width:{{row.pct}}%"></span></td></tr>
+<!--/ROWS:costs.remotion_trace_names-->
+      </tbody>
+    </table></div>
+<!--/SECTION:costs.remotion_trace_names-->
+  </div>
+<!--/SECTION:costs-->
+
   <footer>
     <p><b>数据来源</b>：{{sources.list}}</p>
     <p><b>口径</b>：Mixpanel 原始为项目时区 America/Los_Angeles，已统一换算为 UTC。导出/激活为客户端事件，数据库中不存在该记录。</p>
