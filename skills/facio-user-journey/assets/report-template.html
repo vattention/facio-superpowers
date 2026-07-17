@@ -73,6 +73,12 @@
   td.num{font-family:ui-monospace,monospace}
   tr:last-child td{border-bottom:none}
   .bar{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--cyan),var(--pink));display:inline-block;vertical-align:middle}
+  .dist{display:grid;gap:10px;margin:12px 0 18px}
+  .dist-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(160px,3fr) auto;gap:12px;align-items:center}
+  .dist-name{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;min-width:0;overflow-wrap:anywhere}
+  .dist-track{height:12px;border-radius:999px;background:var(--chip);overflow:hidden;border:1px solid var(--line)}
+  .dist-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--pink))}
+  .dist-meta{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);white-space:nowrap}
 
   .find{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
   .find:last-child{border-bottom:none}
@@ -194,6 +200,41 @@
 <!--/ROWS:recommendations-->
   </div>
 <!--/SECTION:recommendations-->
+
+<!--SECTION:costs-->
+  <h2><span class="n">7</span>用户成本归因</h2>
+  <div class="card">
+    <p><b>{{costs.summary}}</b></p>
+    <p class="muted" style="font-size:13px">{{costs.note}}</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>业务类型</th><th>成本</th><th>占比</th><th>链路数</th><th style="width:180px">量级</th></tr></thead>
+      <tbody>
+<!--ROWS:costs.categories-->
+        <tr><td>{{row.name}}</td><td class="num">{{row.cost}}</td><td class="num">{{row.share}}</td><td class="num">{{row.traces}}</td><td><span class="bar" style="width:{{row.pct}}%"></span></td></tr>
+<!--/ROWS:costs.categories-->
+      </tbody>
+    </table></div>
+<!--SECTION:costs.trace_names-->
+    <h3>全部 trace_name 成本分布</h3>
+    <div class="dist">
+<!--ROWS:costs.trace_names-->
+      <div class="dist-row"><div class="dist-name">{{row.name}}</div><div class="dist-track"><div class="dist-fill" style="width:{{row.pct}}%"></div></div><div class="dist-meta">{{row.cost}} · {{row.share}}</div></div>
+<!--/ROWS:costs.trace_names-->
+    </div>
+<!--/SECTION:costs.trace_names-->
+<!--SECTION:costs.remotion_trace_names-->
+    <h3>remotion trace_name 占比</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th>trace_name</th><th>成本</th><th>占比</th><th>链路数</th><th style="width:180px">量级</th></tr></thead>
+      <tbody>
+<!--ROWS:costs.remotion_trace_names-->
+        <tr><td>{{row.name}}</td><td class="num">{{row.cost}}</td><td class="num">{{row.share}}</td><td class="num">{{row.traces}}</td><td><span class="bar" style="width:{{row.pct}}%"></span></td></tr>
+<!--/ROWS:costs.remotion_trace_names-->
+      </tbody>
+    </table></div>
+<!--/SECTION:costs.remotion_trace_names-->
+  </div>
+<!--/SECTION:costs-->
 
   <footer>
     <p><b>数据来源</b>：{{sources.list}}</p>
