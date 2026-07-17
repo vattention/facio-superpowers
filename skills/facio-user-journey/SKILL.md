@@ -93,7 +93,35 @@ python scripts/render_report.py --journey journey.json --out ~/report.html      
 python scripts/render_report.py --journey journey.json --out ~/share.html --redact  # shareable
 ```
 
-Tier 1 leaves `ai` and `credits` as `null`; those sections strip themselves. `--help` for details.
+**Every key is dotted — there are no bare top-level keys.** A misplaced key renders as `—` silently,
+so build the JSON from this contract rather than guessing:
+
+```jsonc
+{
+  "meta":   { "title": "", "verdict": "", "timeline_note": "", "privacy_note": "", "tier": 1 },
+  "identity": { "email": "", "account_id": "", "last_seen": "", "active_span": "",
+                // Tier 2 only — omit in Tier 1 and the rows disappear (don't send "—")
+                "signup_utc": "", "auth_provider": "", "product": "", "persona": "" },
+  "engagement": { "export_ratio": "1 / 1", "agent_ratio": "30 / 30", "sessions": 0,
+                  "copilot_messages": 0, "timeline_edits": 0,
+                  "events": [ { "name": "Client.Export.Completed", "count": 1 } ] },
+  "findings":   [ { "icon": "✅", "text": "" } ],
+  "timeline":   [ { "t": "2026-07-09 21:00 UTC", "title": "", "detail": "", "kind": "hi" } ],
+  "trajectory": { "note": "", "days": [ { "date": "2026-07-16", "tasks": 19, "exports": 0 } ] },
+  "credits": null,   // Tier 2: { "summary": "384 / 1000" }
+  "ai":      null,   // Tier 2: { "architecture_title","architecture_note","hierarchy",
+                     //           "effects_title","effects_note","note",
+                     //           "effects":[{range,name,component,effect_id}], "prompts":[] }
+  "recommendations": [ { "icon": "🔧", "text": "" } ],
+  "sources": { "list": "" }
+}
+```
+
+- `kind` on a timeline row: `hi` (green, success) · `stop` (red, break) · omit (neutral).
+- **Never compute `pct` yourself** — the renderer scales bars to the max within each list. A
+  hand-picked denominator makes an arbitrary number look authoritative.
+- Tier 1: leave `ai`, `credits`, and the Tier-2 identity fields **absent**. Sections strip
+  themselves. Do not fill them with `—`.
 
 ## Privacy — non-negotiable
 

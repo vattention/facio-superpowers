@@ -96,10 +96,17 @@
     </div>
     <dl class="kv">
       <dt>account_id</dt><dd class="mono">{{identity.account_id}}</dd>
-      <dt>注册</dt><dd>{{identity.signup_utc}} · {{identity.auth_provider}}</dd>
-      <dt>产品</dt><dd>{{identity.product}}</dd>
       <dt>活跃跨度</dt><dd>{{identity.active_span}}</dd>
       <dt>最后活跃</dt><dd>{{identity.last_seen}}</dd>
+<!--SECTION:identity.signup_utc-->
+      <dt>注册</dt><dd>{{identity.signup_utc}}</dd>
+<!--/SECTION:identity.signup_utc-->
+<!--SECTION:identity.auth_provider-->
+      <dt>认证方式</dt><dd>{{identity.auth_provider}}</dd>
+<!--/SECTION:identity.auth_provider-->
+<!--SECTION:identity.product-->
+      <dt>产品</dt><dd>{{identity.product}}</dd>
+<!--/SECTION:identity.product-->
     </dl>
   </div>
 
@@ -122,7 +129,7 @@
   </div>
 
   <h2><span class="n">2</span>行为时间线</h2>
-  <p class="muted" style="font-size:13px">{{timeline_note}}</p>
+  <p class="muted" style="font-size:13px">{{meta.timeline_note}}</p>
   <div class="card">
     <div class="tl">
 <!--ROWS:timeline-->
