@@ -50,6 +50,8 @@ def new_journey(tier: int, email: str, account_id: str | None = None) -> dict[st
                  "verdict": "", "privacy_note": "", "title": "用户行为动线报告"},
         "identity": {"email": email, "account_id": account_id},
         "engagement": {},
+        "usage_summary": {},
+        "projects": [],
         "timeline": [],
         "credits": {} if tier == 2 else None,
         "costs": {} if tier == 2 else None,

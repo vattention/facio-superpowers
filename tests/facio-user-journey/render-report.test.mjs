@@ -85,6 +85,89 @@ test("renders user cost attribution and remotion trace mix", () => {
   assert.match(html, /server_agent/);
   assert.match(html, /title_generation/);
   assert.match(html, /title_generation[\s\S]*width:3%/);
+  assert.doesNotMatch(html, /使用规模统计/);
+  assert.doesNotMatch(html, /每个客户端工程与产出/);
+});
+
+test("renders usage summary and per-project output evidence", () => {
+  const dir = mkdtempSync(join(tmpdir(), "facio-user-journey-"));
+  const journeyPath = join(dir, "journey.json");
+  const outPath = join(dir, "report.html");
+
+  writeFileSync(
+    journeyPath,
+    JSON.stringify({
+      meta: {
+        title: "用户行为报告",
+        verdict: "已完成统计",
+        timeline_note: "测试",
+        privacy_note: "local only",
+        tier: 2,
+      },
+      identity: {
+        email: "user@example.com",
+        account_id: "acct_1",
+        last_seen: "2026-07-17",
+        active_span: "95 分 13 秒，单日",
+      },
+      engagement: { events: [] },
+      usage_summary: {
+        active_span: "95 分 13 秒，单日",
+        projects: "2（可观测）",
+        assets: "3（已确认）",
+        asset_duration: "915.69 秒（15:15.69）",
+        chat: "18 条业务消息 / 77 generation",
+        remotion: "2 套完整流程 / 45 generation",
+        note: "业务次数与 Langfuse generation 分开计数。",
+      },
+      projects: [
+        {
+          project_id: "proj-example-1",
+          evidence: "Client.Project.Created ×1；Editor.Entered ×2 <unsafe>",
+          assets: "2",
+          asset_duration: "1,277.30 秒（21:17.30）",
+          output_duration: "647.90 秒（10:47.90）",
+          export_result: "成功：Export.Started ×1，Export.Completed ×1，Failed ×0",
+        },
+        {
+          project_id: "proj-example-2",
+          evidence: "Project.Reopened ×3；Editor.Entered ×4",
+          assets: "1",
+          asset_duration: "146.40 秒（2:26.40）",
+          output_duration: "未观察到导出开始，无法获取",
+          export_result: "未观察到导出成功或失败",
+        },
+      ],
+      findings: [],
+      timeline: [],
+      trajectory: { days: [] },
+      credits: null,
+      ai: null,
+      costs: null,
+      recommendations: [],
+      sources: { list: "fixture" },
+    }),
+  );
+
+  execFileSync("python", [renderScript, "--journey", journeyPath, "--out", outPath], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+
+  const html = readFileSync(outPath, "utf8");
+  assert.match(html, /使用规模统计/);
+  assert.match(html, /统计跨度/);
+  assert.match(html, /2（可观测）/);
+  assert.match(html, /18 条业务消息 \/ 77 generation/);
+  assert.match(html, /2 套完整流程 \/ 45 generation/);
+  assert.match(html, /每个客户端工程与产出/);
+  assert.match(html, /proj-example-1/);
+  assert.match(html, /工程证据/);
+  assert.match(html, /素材总时长/);
+  assert.match(html, /成片时长/);
+  assert.match(html, /成功：Export\.Started ×1/);
+  assert.match(html, /&lt;unsafe&gt;/);
+  assert.doesNotMatch(html, /<unsafe>/);
 });
 
 test("redacts direct identifiers inside cost notes", () => {
